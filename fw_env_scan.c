@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0+
+// SPDX-License-Identifier: MIT License - Copyright (c) 2026 Nicholas Starke
 /*
  * Minimal U-Boot environment scanner for Linux hosts without Python.
  *
