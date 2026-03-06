@@ -47,6 +47,7 @@
 
 static uint32_t crc32_table[256];
 static bool g_verbose;
+static bool g_bruteforce;
 static int g_output_sock = -1;
 
 static void send_to_output_socket(const char *buf, size_t len)
@@ -588,16 +589,24 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 			uint32_t stored_le = read_le32(buf);
 			uint32_t stored_be = read_be32(buf);
 			uint32_t calc = crc32_calc(buf + 4, (size_t)env_size - 4);
-			if (calc != stored_le && calc != stored_be)
+			bool hint_ok = has_hint_var(buf + 4, (size_t)env_size - 4, hint_override);
+
+			if (!g_bruteforce && calc != stored_le && calc != stored_be)
+				continue;
+			if (g_bruteforce && !hint_ok)
 				continue;
 
 			cfg_off = erase_size ? ((uint64_t)off - ((uint64_t)off % erase_size)) : (uint64_t)off;
 
-			out_printf("  candidate offset=0x%jx  crc=%s-endian  %s\n",
-			       (uintmax_t)off,
-			       (calc == stored_le) ? "LE" : "BE",
-			       has_hint_var(buf + 4, (size_t)env_size - 4, hint_override) ?
-			       "(has known vars)" : "(crc ok)");
+			if (g_bruteforce) {
+				out_printf("  candidate offset=0x%jx  mode=hint-only  (has known vars)\n",
+				       (uintmax_t)off);
+			} else {
+				out_printf("  candidate offset=0x%jx  crc=%s-endian  %s\n",
+				       (uintmax_t)off,
+				       (calc == stored_le) ? "LE" : "BE",
+				       hint_ok ? "(has known vars)" : "(crc ok)");
+			}
 			if (cfg_off != (uint64_t)off)
 				out_printf("    aligned offset (erase block floor): 0x%jx\n",
 				       (uintmax_t)cfg_off);
@@ -619,23 +628,25 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size,
 static void usage(const char *prog)
 {
 	err_printf(
-		"Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [<dev:step> ...]\n"
+		"Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [<dev:step> ...]\n"
 		"             [-o <ip:port>|--output <ip:port>]\n"
 		"  no args: auto-devices + common env sizes\n"
 		"  --verbose: print scan progress and non-hit details\n"
 		"  --size: fixed env size\n"
 		"  --hint: override default env hint string (example: bootcmd=)\n"
 		"  --dev: scan only the specified MTD device path (step from sysfs/proc)\n"
+		"  --brutefoce/--bruteforce: skip CRC check and match by hint strings only\n"
 		"  --output: duplicate all output to TCP destination ip:port\n"
 		"Examples:\n"
 		"  %s\n"
 		"  %s --verbose\n"
+		"  %s --bruteforce --hint bootcmd=\n"
 		"  %s --output 192.168.1.50:5000\n"
 		"  %s --size 0x10000\n"
 		"  %s --hint bootcmd=\n"
 		"  %s --dev /dev/mtd3 --size 0x10000\n"
 		"  %s --size 0x10000 /dev/mtd0:0x10000\n",
-		prog, prog, prog, prog, prog, prog, prog, prog);
+		prog, prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 int main(int argc, char **argv)
@@ -657,12 +668,14 @@ int main(int argc, char **argv)
 		{ "size", required_argument, NULL, 's' },
 		{ "hint", required_argument, NULL, 'H' },
 		{ "dev", required_argument, NULL, 'd' },
+		{ "brutefoce", no_argument, NULL, 'b' },
+		{ "bruteforce", no_argument, NULL, 'b' },
 		{ "output", required_argument, NULL, 'o' },
 		{ 0, 0, 0, 0 }
 	};
 
 	opterr = 0;
-	while ((opt = getopt_long(argc, argv, "hvs:H:d:o:", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
@@ -679,6 +692,9 @@ int main(int argc, char **argv)
 			break;
 		case 'd':
 			dev_override = optarg;
+			break;
+		case 'b':
+			g_bruteforce = true;
 			break;
 		case 'o':
 			output_target = optarg;

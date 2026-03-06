@@ -56,6 +56,7 @@ make clean
 - `--size <env_size>` — fixed environment size (for example `0x10000`)
 - `--hint <hint>` — override hint string used for positive labeling
 - `--dev <device>` — scan only one device (step inferred from sysfs/proc)
+- `--brutefoce` / `--bruteforce` — skip CRC checks and match candidates by hints only
 - `--output <ip:port>` — duplicate all output to a TCP destination
 
 ### Examples
