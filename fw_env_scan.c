@@ -261,6 +261,10 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size)
 	uint8_t *buf;
 	off_t off;
 	int hits = 0;
+	uint64_t sysfs_erasesize;
+	uint64_t erase_size;
+	uint64_t sector_count;
+	uint64_t cfg_off;
 
 	if (!step || !env_size)
 		return -1;
@@ -290,6 +294,10 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size)
 		return -1;
 	}
 
+	sysfs_erasesize = guess_erasesize_from_sysfs(dev);
+	erase_size = sysfs_erasesize ? sysfs_erasesize : step;
+	sector_count = erase_size ? ((env_size + erase_size - 1) / erase_size) : 0;
+
 	buf = malloc((size_t)env_size);
 	if (!buf) {
 		close(fd);
@@ -316,13 +324,19 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size)
 			if (calc != stored_le && calc != stored_be)
 				continue;
 
+			cfg_off = erase_size ? ((uint64_t)off - ((uint64_t)off % erase_size)) : (uint64_t)off;
+
 			printf("  candidate offset=0x%jx  crc=%s-endian  %s\n",
 			       (uintmax_t)off,
 			       (calc == stored_le) ? "LE" : "BE",
 			       has_hint_var(buf + 4, (size_t)env_size - 4) ?
 			       "(has known vars)" : "(crc ok)");
-			printf("    fw_env.config line: %s 0x%jx 0x%jx 0x%jx\n",
-			       dev, (uintmax_t)off, (uintmax_t)env_size, (uintmax_t)step);
+			if (cfg_off != (uint64_t)off)
+				printf("    aligned offset (erase block floor): 0x%jx\n",
+				       (uintmax_t)cfg_off);
+			printf("    fw_env.config line: %s 0x%jx 0x%jx 0x%jx 0x%jx\n",
+			       dev, (uintmax_t)cfg_off, (uintmax_t)env_size,
+			       (uintmax_t)erase_size, (uintmax_t)sector_count);
 			hits++;
 		}
 	}
