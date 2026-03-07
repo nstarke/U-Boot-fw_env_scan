@@ -831,6 +831,11 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
+	if (geteuid() != 0) {
+		err_printf("This program must be run as root.\n");
+		return 1;
+	}
+
 	if (setup_output_socket(output_target) < 0)
 		return 2;
 
