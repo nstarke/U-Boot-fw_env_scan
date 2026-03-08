@@ -58,13 +58,13 @@ normalize_isa_value() {
     value="$1"
     # Strip carriage returns/newlines that may be introduced by copy/paste or CRLF sources.
     if has_printf; then
-        printf '%s' "$value" | tr -d '\r\n'
+        printf '%s' "$value" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
     else
         # shell fallback when printf is unavailable
         cat <<EOF_NORMALIZE_ISA | tr -d '\r\n'
 $value
 EOF_NORMALIZE_ISA
-    fi
+    fi | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
 }
 
 print_valid_isas() {
@@ -189,7 +189,15 @@ fi
 
 ISA="$(normalize_isa_value "$ISA")"
 
-if ! list_valid_isas | tr -d '\r' | grep -Fx -- "$ISA" >/dev/null 2>&1; then
+isa_valid=1
+for valid_isa in $(list_valid_isas | tr -d '\r' | sed 's/[[:space:]]*$//' | sed '/^$/d'); do
+    if [ "$valid_isa" = "$ISA" ]; then
+        isa_valid=0
+        break
+    fi
+done
+
+if [ "$isa_valid" -ne 0 ]; then
     echo "error: invalid --isa '$ISA'"
     echo "valid values:"
     print_valid_isas
