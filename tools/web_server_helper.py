@@ -328,10 +328,9 @@ def build_handler(
 
             target_log_path.parent.mkdir(parents=True, exist_ok=True)
             with target_log_path.open("ab") as fp:
-                fp.write(f"[{timestamp}] {src_ip} {self.path}\n".encode("utf-8"))
-                fp.write(f"Content-Type: {normalized_content_type}\n".encode("utf-8"))
                 fp.write(payload_to_log)
-                fp.write(b"\n\n---\n\n")
+                if not payload_to_log.endswith(b"\n"):
+                    fp.write(b"\n")
 
             if normalized_content_type == "application/octet-stream":
                 binary_out_dir.mkdir(parents=True, exist_ok=True)
