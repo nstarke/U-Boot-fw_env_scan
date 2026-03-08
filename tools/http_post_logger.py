@@ -69,11 +69,17 @@ def download_latest_release_assets(
     return downloaded, skipped_existing
 
 
-def build_handler(log_path: Path, assets_dir: Path, tests_dir: Path):
+def build_handler(log_path: Path, assets_dir: Path, tests_dir: Path, verbose: bool = False):
     class PostLoggerHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args):
             # Keep server console quiet; requests are written to log_path.
             return
+
+        def _verbose_request_log(self) -> None:
+            if not verbose:
+                return
+            timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
+            print(f"[{timestamp}] {self.client_address[0]} {self.command} {self.path}", flush=True)
 
         def _send_bytes(self, status: int, body: bytes, content_type: str = "text/plain; charset=utf-8"):
             self.send_response(status)
@@ -144,6 +150,7 @@ def build_handler(log_path: Path, assets_dir: Path, tests_dir: Path):
             self.do_GET()
 
         def do_GET(self):
+            self._verbose_request_log()
             parsed = urllib.parse.urlparse(self.path)
             if parsed.path == "/":
                 self._send_bytes(200, self._build_index(), "text/html; charset=utf-8")
@@ -162,6 +169,7 @@ def build_handler(log_path: Path, assets_dir: Path, tests_dir: Path):
             self._send_bytes(200, data, content_type)
 
         def do_POST(self):
+            self._verbose_request_log()
             content_len = int(self.headers.get("Content-Length", "0"))
             payload = self.rfile.read(content_len)
             timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -249,6 +257,7 @@ def main() -> int:
         help="Force re-download of release binaries even if files already exist locally",
     )
     parser.add_argument("--https", action="store_true", help="Enable HTTPS with TLS")
+    parser.add_argument("--verbose", action="store_true", help="Log each incoming web request to stdout")
     parser.add_argument("--cert", default="tools/certs/localhost.crt", help="TLS cert path")
     parser.add_argument("--key", default="tools/certs/localhost.key", help="TLS private key path")
     args = parser.parse_args()
@@ -280,7 +289,7 @@ def main() -> int:
             "(use --force-download to replace them)"
         )
 
-    handler = build_handler(log_path, assets_dir, tests_dir)
+    handler = build_handler(log_path, assets_dir, tests_dir, verbose=args.verbose)
     server = HTTPServer((args.host, args.port), handler)
 
     scheme = "http"
