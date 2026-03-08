@@ -1,5 +1,5 @@
-#ifndef FW_SCAN_H
-#define FW_SCAN_H
+#ifndef UBOOT_SCAN_H
+#define UBOOT_SCAN_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -23,5 +23,8 @@ int fw_connect_tcp_ipv4(const char *spec);
 int fw_send_all(int sock, const uint8_t *buf, size_t len);
 void fw_crc32_init(uint32_t table[256]);
 uint32_t fw_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len);
+
+int fw_env_scan_main(int argc, char **argv);
+int fw_image_scan_main(int argc, char **argv);
 
 #endif

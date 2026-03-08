@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT License - Copyright (c) 2026 Nicholas Starke
 
-#include "fw_scan.h"
+#include "uboot_scan.h"
 
 #include <errno.h>
 #include <arpa/inet.h>
@@ -643,7 +643,7 @@ static int scan_dev_for_image(const char *dev, uint64_t step)
 	return hits;
 }
 
-int main(int argc, char **argv)
+int fw_image_scan_main(int argc, char **argv)
 {
 	const char *dev_override = NULL;
 	const char *output_target = NULL;
@@ -654,6 +654,15 @@ int main(int argc, char **argv)
 	bool offset_set = false;
 	int opt;
 	int total_hits = 0;
+
+	optind = 1;
+	g_verbose = false;
+	g_allow_text = false;
+	g_send_logs = false;
+	if (g_log_sock >= 0) {
+		close(g_log_sock);
+		g_log_sock = -1;
+	}
 
 	static const struct option long_opts[] = {
 		{ "verbose", no_argument, NULL, 'v' },

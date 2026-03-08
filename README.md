@@ -1,9 +1,9 @@
-# fw_env_scan / fw_image_scan
+# uboot_audit
 
-This repo provides two Linux host-side C utilities for U-Boot-related flash analysis:
+This repo provides a Linux host-side C utility for U-Boot-related flash analysis:
 
-- `fw_env_scan`: find U-Boot environment candidates and print `fw_env.config` lines.
-- `fw_image_scan`: find likely U-Boot image headers, optionally pull image bytes, or resolve load address.
+- `uboot_audit env`: find U-Boot environment candidates and print `fw_env.config` lines.
+- `uboot_audit image`: find likely U-Boot image headers, optionally pull image bytes, or resolve load address.
 
 Both tools are intended for embedded/Linux recovery and diagnostics workflows.
 
@@ -11,13 +11,13 @@ Both tools are intended for embedded/Linux recovery and diagnostics workflows.
 
 ## Build
 
-Build environment scanner only:
+Build binary:
 
 ```bash
 make env
 ```
 
-Build image scanner only:
+Build binary (alias):
 
 ```bash
 make image
@@ -44,17 +44,16 @@ make clean
 Cross compile example:
 
 ```bash
-make CC=arm-linux-gnueabi-gcc env
-make CC=arm-linux-gnueabi-gcc image
+make CC=arm-linux-gnueabi-gcc
 ```
 
 ---
 
-## `fw_env_scan`
+## `uboot_audit env`
 
 Scans MTD/UBI devices for blocks that resemble a valid U-Boot environment (CRC-verified by default), then prints candidate `fw_env.config` lines.
 
-### `fw_env_scan` arguments
+### `env` arguments
 
 - `--verbose` — print scan progress and non-hit details
 - `--size <env_size>` — fixed environment size (for example `0x10000`)
@@ -63,15 +62,15 @@ Scans MTD/UBI devices for blocks that resemble a valid U-Boot environment (CRC-v
 - `--brutefoce` / `--bruteforce` — skip CRC checks and match by hint strings only
 - `--output <IPv4:port>` — duplicate output to TCP destination
 
-### `fw_env_scan` examples
+### `env` examples
 
 ```bash
-./fw_env_scan
-./fw_env_scan --verbose
-./fw_env_scan --size 0x10000
-./fw_env_scan --dev /dev/mtd3 --size 0x10000
-./fw_env_scan --size 0x10000 /dev/mtd0:0x10000 /dev/mtd1:0x20000
-./fw_env_scan --output 192.168.1.50:5000 --verbose
+./uboot_audit env
+./uboot_audit env --verbose
+./uboot_audit env --size 0x10000
+./uboot_audit env --dev /dev/mtd3 --size 0x10000
+./uboot_audit env --size 0x10000 /dev/mtd0:0x10000 /dev/mtd1:0x20000
+./uboot_audit env --output 192.168.1.50:5000 --verbose
 ```
 
 Example candidate line:
@@ -82,11 +81,11 @@ fw_env.config line: /dev/mtd0 0x40000 0x10000 0x10000 0x1
 
 ---
 
-## `fw_image_scan`
+## `uboot_audit image`
 
 Scans MTD block/char devices for likely U-Boot image signatures. FIT/uImage checks are validated structurally to reduce false positives.
 
-### `fw_image_scan` arguments
+### `image` arguments
 
 - `--verbose` — print scan progress
 - `--dev <device>` — restrict scan or action to one device
@@ -98,7 +97,7 @@ Scans MTD block/char devices for likely U-Boot image signatures. FIT/uImage chec
 - `--output <IPv4:port>` — TCP destination used by `--pull`
 - `--find-address` — parse image at `--offset` and print load address (uImage/FIT)
 
-### `fw_image_scan` argument constraints
+### `image` argument constraints
 
 - `--pull` **requires**:
   - `--dev`
@@ -115,36 +114,36 @@ Scans MTD block/char devices for likely U-Boot image signatures. FIT/uImage chec
 - `--send-logs` **cannot** be combined with:
   - `--pull`
 
-### `fw_image_scan` examples
+### `image` examples
 
 Scan all MTD devices:
 
 ```bash
-./fw_image_scan --verbose
+./uboot_audit image --verbose
 ```
 
 Scan one device:
 
 ```bash
-./fw_image_scan --dev /dev/mtdblock4 --step 0x1000
+./uboot_audit image --dev /dev/mtdblock4 --step 0x1000
 ```
 
 Find load address at known offset:
 
 ```bash
-./fw_image_scan --find-address --dev /dev/mtdblock4 --offset 0x200
+./uboot_audit image --find-address --dev /dev/mtdblock4 --offset 0x200
 ```
 
 Send scan logs over TCP:
 
 ```bash
-./fw_image_scan --verbose --send-logs --output 192.168.1.50:5000
+./uboot_audit image --verbose --send-logs --output 192.168.1.50:5000
 ```
 
 Pull image bytes to TCP listener:
 
 ```bash
-./fw_image_scan --pull --dev /dev/mtdblock4 --offset 0x200 --output 192.168.1.50:5000
+./uboot_audit image --pull --dev /dev/mtdblock4 --offset 0x200 --output 192.168.1.50:5000
 ```
 
 ---

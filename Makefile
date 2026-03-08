@@ -2,30 +2,22 @@ CC      ?= gcc
 CFLAGS  ?= -O2 -Wall -Wextra
 LDFLAGS ?=
 
-COMMON_SRC := fw_scan.c
-
-ENV_TARGET := fw_env_scan
-ENV_SRC    := fw_env_scan.c $(COMMON_SRC)
-
-IMAGE_TARGET := fw_image_scan
-IMAGE_SRC    := fw_image_scan.c $(COMMON_SRC)
+TARGET := uboot_audit
+SRC    := uboot_audit.c uboot_env_scan.c uboot_image_scan.c uboot_scan.c
 
 .PHONY: all env image static clean
 
-all: env image
+all: $(TARGET)
 
-env: $(ENV_TARGET)
+env: $(TARGET)
 
-image: $(IMAGE_TARGET)
+image: $(TARGET)
 
-$(ENV_TARGET): $(ENV_SRC)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ENV_SRC)
-
-$(IMAGE_TARGET): $(IMAGE_SRC)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(IMAGE_SRC)
+$(TARGET): $(SRC)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SRC)
 
 static: LDFLAGS += -static
 static: all
 
 clean:
-	rm -f $(ENV_TARGET) $(IMAGE_TARGET)
+	rm -f $(TARGET)

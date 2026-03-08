@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT License - Copyright (c) 2026 Nicholas Starke
 
-#include "fw_scan.h"
+#include "uboot_scan.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -228,7 +228,7 @@ static void usage(const char *prog)
 		"             [--output <ip:port>]\n", prog);
 }
 
-int main(int argc, char **argv)
+int fw_env_scan_main(int argc, char **argv)
 {
 	static const uint64_t common_sizes[] = { 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000, 0x40000, 0x80000 };
 	bool fixed_size = false;
@@ -238,6 +238,14 @@ int main(int argc, char **argv)
 	const char *output_target = NULL;
 	int argi;
 	int opt;
+
+	optind = 1;
+	g_verbose = false;
+	g_bruteforce = false;
+	if (g_output_sock >= 0) {
+		close(g_output_sock);
+		g_output_sock = -1;
+	}
 
 	static const struct option long_opts[] = {
 		{ "verbose", no_argument, NULL, 'v' },

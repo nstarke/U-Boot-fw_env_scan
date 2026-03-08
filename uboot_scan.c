@@ -1,4 +1,4 @@
-#include "fw_scan.h"
+#include "uboot_scan.h"
 
 #include <arpa/inet.h>
 #include <dirent.h>

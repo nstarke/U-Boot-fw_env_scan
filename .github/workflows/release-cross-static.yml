@@ -72,8 +72,7 @@ jobs:
           BUILT=0
           for T in "${TARGETS[@]}"; do
             echo "Trying target: ${T}"
-            if zig cc -O2 -static -Wno-deprecated-non-prototype -target "${T}" -o dist/${{ matrix.name }}/fw_env_scan-${{ matrix.name }} fw_env_scan.c fw_scan.c \
-              && zig cc -O2 -static -Wno-deprecated-non-prototype -target "${T}" -o dist/${{ matrix.name }}/fw_image_scan-${{ matrix.name }} fw_image_scan.c fw_scan.c; then
+            if zig cc -O2 -static -Wno-deprecated-non-prototype -target "${T}" -o dist/${{ matrix.name }}/uboot_audit-${{ matrix.name }} uboot_audit.c uboot_env_scan.c uboot_image_scan.c uboot_scan.c; then
               echo "Built successfully with target: ${T}"
               BUILT=1
               break
@@ -91,8 +90,7 @@ jobs:
         with:
           name: fw-tools-${{ matrix.name }}
           path: |
-            dist/${{ matrix.name }}/fw_env_scan-${{ matrix.name }}
-            dist/${{ matrix.name }}/fw_image_scan-${{ matrix.name }}
+            dist/${{ matrix.name }}/uboot_audit-${{ matrix.name }}
 
   publish-release-assets:
     name: Publish release assets
@@ -109,5 +107,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/**/fw_env_scan-*
-            release-assets/**/fw_image_scan-*
+            release-assets/**/uboot_audit-*
