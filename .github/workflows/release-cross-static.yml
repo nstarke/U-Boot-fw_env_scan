@@ -25,17 +25,17 @@ jobs:
           - name: aarch64-be
             zig_targets: aarch64_be-linux-musl
           - name: mips-le
-            zig_targets: mipsel-linux-musl
+            zig_targets: mipsel-linux-musleabi,mipsel-linux-musleabihf,mipsel-linux-gnueabi,mipsel-linux-gnueabihf
           - name: mips-be
-            zig_targets: mips-linux-musl
+            zig_targets: mips-linux-musleabi,mips-linux-musleabihf,mips-linux-gnueabi,mips-linux-gnueabihf
           - name: mips64-le
-            zig_targets: mips64el-linux-musl,mips64el-linux-gnu
+            zig_targets: mips64el-linux-muslabi64,mips64el-linux-muslabin32,mips64el-linux-gnuabi64,mips64el-linux-gnuabin32
           - name: mips64-be
-            zig_targets: mips64-linux-musl,mips64-linux-gnu
+            zig_targets: mips64-linux-muslabi64,mips64-linux-muslabin32,mips64-linux-gnuabi64,mips64-linux-gnuabin32
           - name: powerpc-le
             zig_targets: powerpc64le-linux-musl,powerpc64le-linux-gnu
           - name: powerpc-be
-            zig_targets: powerpc-linux-musl
+            zig_targets: powerpc-linux-musleabi,powerpc-linux-musleabihf,powerpc-linux-gnueabi,powerpc-linux-gnueabihf
           - name: x86
             zig_targets: x86-linux-musl,i386-linux-musl
           - name: x86_64
@@ -44,6 +44,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Debug selected targets
+        run: |
+          echo "matrix.name=${{ matrix.name }}"
+          echo "matrix.zig_targets=${{ matrix.zig_targets }}"
 
       - name: Install Zig
         run: |
@@ -58,6 +63,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/${{ matrix.name }}
+
+          case "${{ matrix.zig_targets }}" in
+            *mips64-linux-musl*|*mips64-linux-gnu*|*mips64el-linux-musl*|*mips64el-linux-gnu*)
+              echo "ERROR: stale/non-ABI-specific mips64 target list detected: ${{ matrix.zig_targets }}"
+              echo "Expected ABI-specific variants like muslabi64/muslabin32/gnuabi64/gnuabin32."
+              exit 2
+              ;;
+          esac
 
           IFS=',' read -ra TARGETS <<< "${{ matrix.zig_targets }}"
           BUILT=0
