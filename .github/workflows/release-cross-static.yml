@@ -37,7 +37,7 @@ jobs:
           - name: powerpc-be
             zig_targets: powerpc-linux-musleabi,powerpc-linux-musleabihf,powerpc-linux-gnueabi,powerpc-linux-gnueabihf
           - name: x86
-            zig_targets: x86-linux-musl,i386-linux-musl
+            zig_targets: x86-linux-musl
           - name: x86_64
             zig_targets: x86_64-linux-musl
           - name: riscv32
