@@ -4,6 +4,43 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
+TEST_OUTPUT_HTTPS="${TEST_OUTPUT_HTTPS:-}"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --output-http)
+            TEST_OUTPUT_HTTP="$2"
+            shift 2
+            ;;
+        --output-http=*)
+            TEST_OUTPUT_HTTP="${1#*=}"
+            shift
+            ;;
+        --output-https)
+            TEST_OUTPUT_HTTPS="$2"
+            shift 2
+            ;;
+        --output-https=*)
+            TEST_OUTPUT_HTTPS="${1#*=}"
+            shift
+            ;;
+        *)
+            echo "error: unknown argument: $1"
+            echo "usage: $0 [--output-http <url> | --output-https <url>]"
+            exit 2
+            ;;
+    esac
+done
+
+if [[ -n "$TEST_OUTPUT_HTTP" && -n "$TEST_OUTPUT_HTTPS" ]]; then
+    echo "error: set only one of --output-http or --output-https"
+    exit 2
+fi
+
+export TEST_OUTPUT_HTTP
+export TEST_OUTPUT_HTTPS
+
 rc=0
 
 for test_script in \
