@@ -12,7 +12,7 @@ source "$SCRIPT_DIR/common.sh"
 require_binary "$BIN"
 print_section "env subcommand argument coverage"
 
-run_exact_case "env --help" 0 "$BIN" env --help
+run_exact_case "env --help" 2 "$BIN" env --help
 run_accept_case "env --verbose" "$BIN" env --verbose
 run_accept_case "env --size" "$BIN" env --size 0x1000
 run_accept_case "env --hint" "$BIN" env --hint bootcmd=

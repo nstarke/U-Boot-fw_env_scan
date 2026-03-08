@@ -57,7 +57,7 @@ SRC    := uboot_audit.c uboot_env_scan.c uboot_image_scan.c uboot_audit_scan.c u
 	  audit-rules/uboot_validate_secureboot_rule.c \
 	  $(LIBCSV_SRC) $(GENERATED_CA_SRC)
 
-.PHONY: all env image static clean
+.PHONY: all env image static test clean
 
 all: $(TARGET)
 
@@ -97,6 +97,9 @@ $(TARGET): $(SRC) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_LIB)
 
 static: LDFLAGS += -static
 static: all
+
+test:
+	bash tests/test_all.sh
 
 clean:
 	rm -f $(TARGET)

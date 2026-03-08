@@ -70,6 +70,12 @@ Clean:
 make clean
 ```
 
+Run argument-coverage tests:
+
+```bash
+make test
+```
+
 Cross compile example:
 
 ```bash
