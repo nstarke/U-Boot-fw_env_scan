@@ -1242,6 +1242,16 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 		return -1;
 	}
 
+	if (g_verbose) {
+		emit_env_verbosef(dev,
+			0,
+			"Scanning %s (step=0x%jx, env_size=0x%jx, device_size=0x%jx)",
+			dev,
+			(uintmax_t)step,
+			(uintmax_t)env_size,
+			(uintmax_t)st.st_size);
+	}
+
 	for (off = 0; (uint64_t)off + env_size <= (uint64_t)st.st_size; off += (off_t)step) {
 		if ((uint64_t)pread(fd, buf, (size_t)env_size, off) != env_size)
 			break;
@@ -1299,6 +1309,14 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 
 			emit_redundant_pair_record(dev, prev, curr);
 		}
+	}
+
+	if (g_verbose && hits == 0) {
+		emit_env_verbosef(dev,
+			0,
+			"No environment candidates found on %s for env_size=0x%jx",
+			dev,
+			(uintmax_t)env_size);
 	}
 
 	free(cands);

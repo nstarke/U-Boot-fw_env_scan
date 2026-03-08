@@ -1522,35 +1522,44 @@ int uboot_image_scan_main(int argc, char **argv)
 	if (pull_mode) {
 		if (!dev_override || !offset_set || (!output_tcp_target && !g_output_http_uri)) {
 			err_printf("--pull requires --dev, --offset, and either --output-tcp, --output-http, or --output-https\n");
-			return 2;
+			total_hits = -1;
+			goto out;
 		}
 		if (output_tcp_target && g_output_http_uri) {
 			err_printf("--pull accepts only one of --output-tcp, --output-http, or --output-https\n");
-			return 2;
+			total_hits = -1;
+			goto out;
 		}
 		if (find_address || list_commands) {
 			err_printf("--pull cannot be combined with --find-address or --list-commands\n");
-			return 2;
+			total_hits = -1;
+			goto out;
 		}
 		if (g_output_http_uri)
-			return pull_image_to_output_http(dev_override, pull_offset, g_output_http_uri);
-		return pull_image_to_output_tcp(dev_override, pull_offset, output_tcp_target);
+			total_hits = (pull_image_to_output_http(dev_override, pull_offset, g_output_http_uri) == 0) ? 1 : -1;
+		else
+			total_hits = (pull_image_to_output_tcp(dev_override, pull_offset, output_tcp_target) == 0) ? 1 : -1;
+		goto out;
 	}
 
 	if (find_address) {
 		if (!dev_override || !offset_set) {
 			err_printf("--find-address requires --dev and --offset\n");
-			return 2;
+			total_hits = -1;
+			goto out;
 		}
 		if (output_tcp_target && !g_send_logs) {
 			err_printf("--find-address cannot be combined with --output-tcp (unless --send-logs is set)\n");
-			return 2;
+			total_hits = -1;
+			goto out;
 		}
 		if (list_commands) {
 			err_printf("--find-address cannot be combined with --list-commands\n");
-			return 2;
+			total_hits = -1;
+			goto out;
 		}
-		return find_image_load_address(dev_override, pull_offset);
+		total_hits = (find_image_load_address(dev_override, pull_offset) == 0) ? 1 : -1;
+		goto out;
 	}
 
 	if (list_commands) {
@@ -1639,7 +1648,7 @@ out:
 	if (g_log_sock >= 0)
 		close(g_log_sock);
 
-	if (g_output_http_uri) {
+	if (g_output_http_uri && g_output_http_len > 0) {
 		char errbuf[256];
 		if (uboot_http_post(g_output_http_uri,
 				 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
