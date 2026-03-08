@@ -895,7 +895,7 @@ static void usage(const char *prog)
 {
 	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [--skip-remove] [--skip-mtd] [--skip-ubi] [--output-config[=<path>]] [--write <path>] [<dev:step> ...]\n"
 		"             [--parse-vars]\n"
-		"             [--output <ip:port>]\n", prog);
+		"             [--output-tcp <ip:port>]\n", prog);
 }
 
 int fw_env_scan_main(int argc, char **argv)
@@ -905,7 +905,7 @@ int fw_env_scan_main(int argc, char **argv)
 	uint64_t env_size = 0;
 	const char *hint_override = NULL;
 	const char *dev_override = NULL;
-	const char *output_target = NULL;
+	const char *output_tcp_target = NULL;
 	const char *output_config_path = NULL;
 	const char *write_script_path = NULL;
 	bool write_mode = false;
@@ -941,7 +941,7 @@ int fw_env_scan_main(int argc, char **argv)
 		{ "skip-ubi", no_argument, NULL, 'U' },
 		{ "parse-vars", no_argument, NULL, 'P' },
 		{ "output-config", optional_argument, NULL, 'c' },
-		{ "output", required_argument, NULL, 'o' },
+		{ "output-tcp", required_argument, NULL, 'o' },
 		{ "write", required_argument, NULL, 'w' },
 		{ 0, 0, 0, 0 }
 	};
@@ -959,7 +959,7 @@ int fw_env_scan_main(int argc, char **argv)
 		case 'U': skip_ubi = true; break;
 		case 'P': g_parse_vars = true; break;
 		case 'c': output_config_path = optarg ? optarg : "fw_env.config"; break;
-		case 'o': output_target = optarg; break;
+		case 'o': output_tcp_target = optarg; break;
 		case 'w': write_script_path = optarg; break;
 		default: usage(argv[0]); return 2;
 		}
@@ -1002,10 +1002,10 @@ int fw_env_scan_main(int argc, char **argv)
 		goto out;
 	}
 
-	if (output_target && *output_target) {
-		g_output_sock = fw_connect_tcp_ipv4(output_target);
+	if (output_tcp_target && *output_tcp_target) {
+		g_output_sock = fw_connect_tcp_ipv4(output_tcp_target);
 		if (g_output_sock < 0) {
-			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_target);
+			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_tcp_target);
 			ret = 2;
 			goto out;
 		}

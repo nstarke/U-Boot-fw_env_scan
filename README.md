@@ -62,7 +62,7 @@ Scans MTD/UBI devices for blocks that resemble a valid U-Boot environment (CRC-v
 - `--brutefoce` / `--bruteforce` — skip CRC checks and match by hint strings only
 - `--parse-vars` — print parsed key/value variables from candidate environments
 - `--output-config[=<path>]` — write discovered `fw_env.config` lines to file (default `fw_env.config`)
-- `--output <IPv4:port>` — duplicate output to TCP destination
+- `--output-tcp <IPv4:port>` — duplicate output to TCP destination
 - `--write <path>` — apply env updates from text file (native `fw_setenv`-style behavior)
 
 ### `--write` behavior
@@ -90,7 +90,7 @@ Scans MTD/UBI devices for blocks that resemble a valid U-Boot environment (CRC-v
 ./uboot_audit env --size 0x10000
 ./uboot_audit env --dev /dev/mtd3 --size 0x10000
 ./uboot_audit env --size 0x10000 /dev/mtd0:0x10000 /dev/mtd1:0x20000
-./uboot_audit env --output 192.168.1.50:5000 --verbose
+./uboot_audit env --output-tcp 192.168.1.50:5000 --verbose
 ./uboot_audit env --write ./new_env.txt
 ```
 
@@ -112,10 +112,10 @@ Scans MTD block/char devices for likely U-Boot image signatures. FIT/uImage chec
 - `--dev <device>` — restrict scan or action to one device
 - `--step <bytes>` — scan stride (default `0x1000`)
 - `--allow-text` — also match plain `U-Boot` text (higher false-positive risk)
-- `--send-logs` — send tool logs over TCP using `--output <IPv4:port>`
-- `--pull` — pull image bytes from `--dev` at `--offset` and send over TCP to `--output`
+- `--send-logs` — send tool logs over TCP using `--output-tcp <IPv4:port>`
+- `--pull` — pull image bytes from `--dev` at `--offset` and send over TCP to `--output-tcp`
 - `--offset <bytes>` — image offset used by `--pull` or `--find-address`
-- `--output <IPv4:port>` — TCP destination used by `--pull`
+- `--output-tcp <IPv4:port>` — TCP destination used by `--pull`
 - `--find-address` — parse image at `--offset` and print load address (uImage/FIT)
 
 ### `image` argument constraints
@@ -123,15 +123,15 @@ Scans MTD block/char devices for likely U-Boot image signatures. FIT/uImage chec
 - `--pull` **requires**:
   - `--dev`
   - `--offset`
-  - `--output`
+  - `--output-tcp`
 - `--find-address` **requires**:
   - `--dev`
   - `--offset`
 - `--find-address` **cannot** be combined with:
   - `--pull`
-  - `--output`
+  - `--output-tcp`
 - `--send-logs` **requires**:
-  - `--output`
+  - `--output-tcp`
 - `--send-logs` **cannot** be combined with:
   - `--pull`
 
@@ -158,13 +158,13 @@ Find load address at known offset:
 Send scan logs over TCP:
 
 ```bash
-./uboot_audit image --verbose --send-logs --output 192.168.1.50:5000
+./uboot_audit image --verbose --send-logs --output-tcp 192.168.1.50:5000
 ```
 
 Pull image bytes to TCP listener:
 
 ```bash
-./uboot_audit image --pull --dev /dev/mtdblock4 --offset 0x200 --output 192.168.1.50:5000
+./uboot_audit image --pull --dev /dev/mtdblock4 --offset 0x200 --output-tcp 192.168.1.50:5000
 ```
 
 ---

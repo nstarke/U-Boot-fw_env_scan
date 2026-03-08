@@ -386,7 +386,7 @@ static void usage(const char *prog)
 {
 	fprintf(stderr,
 		"Usage: %s [--verbose] [--dev <device>] [--step <bytes>] [--allow-text]\n"
-		"       %s --pull --dev <device> --offset <bytes> --output <IPv4:port>\n"
+		"       %s --pull --dev <device> --offset <bytes> --output-tcp <IPv4:port>\n"
 		"       %s --find-address --dev <device> --offset <bytes>\n"
 		"       %s [--skip-mtd] [--skip-ubi]\n"
 		"  no args: scan /dev/mtdblock*, /dev/mtd*, /dev/ubi*_* and /dev/ubiblock*_* for U-Boot image signatures\n"
@@ -396,11 +396,11 @@ static void usage(const char *prog)
 		"  --allow-text: also match plain 'U-Boot' string (higher false-positive risk)\n"
 		"  --skip-mtd: skip MTD and mtdblock scan targets\n"
 		"  --skip-ubi: skip UBI and ubiblock scan targets\n"
-		"  --send-logs: send tool log output to --output IPv4:port\n"
-		"  --pull: read image from --dev at --offset and stream bytes to --output\n"
+		"  --send-logs: send tool log output to --output-tcp IPv4:port\n"
+		"  --pull: read image from --dev at --offset and stream bytes to --output-tcp\n"
 		"  --find-address: print image load address from header/FIT data\n"
 		"  --offset: byte offset of image header for --pull\n"
-		"  --output: IPv4:TCPPort destination for --pull\n",
+		"  --output-tcp: IPv4:TCPPort destination for --pull\n",
 		prog, prog, prog, prog);
 }
 
@@ -485,7 +485,7 @@ static int find_image_load_address(const char *dev, uint64_t offset)
 	return 1;
 }
 
-static int pull_image_to_output(const char *dev, uint64_t offset, const char *output)
+static int pull_image_to_output_tcp(const char *dev, uint64_t offset, const char *output_tcp_target)
 {
 	uint8_t hdr[UIMAGE_HDR_SIZE];
 	uint64_t dev_size = fw_guess_size_any(dev);
@@ -524,9 +524,9 @@ static int pull_image_to_output(const char *dev, uint64_t offset, const char *ou
 		return 1;
 	}
 
-	sock = fw_connect_tcp_ipv4(output);
+	sock = fw_connect_tcp_ipv4(output_tcp_target);
 	if (sock < 0) {
-		err_printf("Unable to connect to output target %s\n", output);
+		err_printf("Unable to connect to output target %s\n", output_tcp_target);
 		close(fd);
 		return 1;
 	}
@@ -546,7 +546,7 @@ static int pull_image_to_output(const char *dev, uint64_t offset, const char *ou
 			sent += (uint64_t)n;
 		}
 		if (g_verbose)
-			out_printf("Pulled %ju bytes from %s @ 0x%jx to %s\n", (uintmax_t)total_size, dev, (uintmax_t)offset, output);
+			out_printf("Pulled %ju bytes from %s @ 0x%jx to %s\n", (uintmax_t)total_size, dev, (uintmax_t)offset, output_tcp_target);
 	}
 
 	close(sock);
@@ -641,7 +641,7 @@ static int scan_dev_for_image(const char *dev, uint64_t step)
 int fw_image_scan_main(int argc, char **argv)
 {
 	const char *dev_override = NULL;
-	const char *output_target = NULL;
+	const char *output_tcp_target = NULL;
 	uint64_t step = 0x1000;
 	uint64_t pull_offset = 0;
 	bool pull_mode = false;
@@ -666,7 +666,7 @@ int fw_image_scan_main(int argc, char **argv)
 		{ "dev", required_argument, NULL, 'd' },
 		{ "step", required_argument, NULL, 's' },
 		{ "offset", required_argument, NULL, 'o' },
-		{ "output", required_argument, NULL, 'p' },
+		{ "output-tcp", required_argument, NULL, 'p' },
 		{ "pull", no_argument, NULL, 'P' },
 		{ "find-address", no_argument, NULL, 'a' },
 		{ "send-logs", no_argument, NULL, 'L' },
@@ -698,7 +698,7 @@ int fw_image_scan_main(int argc, char **argv)
 			offset_set = true;
 			break;
 		case 'p':
-			output_target = optarg;
+			output_tcp_target = optarg;
 			break;
 		case 'P':
 			pull_mode = true;
@@ -731,8 +731,8 @@ int fw_image_scan_main(int argc, char **argv)
 		return 1;
 	}
 
-	if (g_send_logs && !output_target) {
-		err_printf("--send-logs requires --output\n");
+	if (g_send_logs && !output_tcp_target) {
+		err_printf("--send-logs requires --output-tcp\n");
 		return 2;
 	}
 
@@ -742,23 +742,23 @@ int fw_image_scan_main(int argc, char **argv)
 	}
 
 	if (g_send_logs) {
-		g_log_sock = fw_connect_tcp_ipv4(output_target);
+		g_log_sock = fw_connect_tcp_ipv4(output_tcp_target);
 		if (g_log_sock < 0) {
-			err_printf("Unable to connect to log output target %s\n", output_target);
+			err_printf("Unable to connect to log output target %s\n", output_tcp_target);
 			return 2;
 		}
 	}
 
 	if (pull_mode) {
-		if (!dev_override || !offset_set || !output_target) {
-			err_printf("--pull requires --dev, --offset, and --output\n");
+		if (!dev_override || !offset_set || !output_tcp_target) {
+			err_printf("--pull requires --dev, --offset, and --output-tcp\n");
 			return 2;
 		}
 		if (find_address) {
 			err_printf("--find-address cannot be combined with --pull\n");
 			return 2;
 		}
-		return pull_image_to_output(dev_override, pull_offset, output_target);
+		return pull_image_to_output_tcp(dev_override, pull_offset, output_tcp_target);
 	}
 
 	if (find_address) {
@@ -766,8 +766,8 @@ int fw_image_scan_main(int argc, char **argv)
 			err_printf("--find-address requires --dev and --offset\n");
 			return 2;
 		}
-		if (output_target && !g_send_logs) {
-			err_printf("--find-address cannot be combined with --output (unless --send-logs is set)\n");
+		if (output_tcp_target && !g_send_logs) {
+			err_printf("--find-address cannot be combined with --output-tcp (unless --send-logs is set)\n");
 			return 2;
 		}
 		return find_image_load_address(dev_override, pull_offset);
