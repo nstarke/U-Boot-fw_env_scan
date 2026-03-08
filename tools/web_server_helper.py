@@ -11,6 +11,7 @@ import os
 import shutil
 import ssl
 import subprocess
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -173,7 +174,13 @@ def download_release_assets(
     return downloaded, skipped_existing
 
 
-def build_handler(log_prefix: Path, assets_dir: Path, tests_dir: Path, verbose: bool = False):
+def build_handler(
+    log_prefix: Path,
+    assets_dir: Path,
+    tests_dir: Path,
+    binary_out_dir: Path,
+    verbose: bool = False,
+):
     class PostLoggerHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args):
             # Keep server console quiet; requests are written to content-type log files.
@@ -325,6 +332,13 @@ def build_handler(log_prefix: Path, assets_dir: Path, tests_dir: Path, verbose: 
                 fp.write(payload_to_log)
                 fp.write(b"\n\n---\n\n")
 
+            if normalized_content_type == "application/octet-stream":
+                binary_out_dir.mkdir(parents=True, exist_ok=True)
+                ts_safe = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+                unique = uuid.uuid4().hex[:8]
+                binary_path = binary_out_dir / f"pull_{ts_safe}_{src_ip.replace(':', '_')}_{unique}.bin"
+                binary_path.write_bytes(payload)
+
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
@@ -395,6 +409,14 @@ def main() -> int:
         help="Directory to serve test shell scripts from (default: tests)",
     )
     parser.add_argument(
+        "--binary-out-dir",
+        default="",
+        help=(
+            "Directory to store raw application/octet-stream POST bodies "
+            "(default: <log-prefix>.binary_files)"
+        ),
+    )
+    parser.add_argument(
         "--github-token",
         default=os.environ.get("GITHUB_TOKEN", ""),
         help="Optional GitHub token (defaults to GITHUB_TOKEN env var)",
@@ -413,6 +435,11 @@ def main() -> int:
     log_prefix = Path(args.log_prefix)
     assets_dir = Path(args.assets_dir)
     tests_dir = Path(args.tests_dir)
+    binary_out_dir = (
+        Path(args.binary_out_dir)
+        if args.binary_out_dir
+        else log_prefix.with_name(f"{log_prefix.name}.binary_files")
+    )
     token = args.github_token or None
 
     try:
@@ -468,7 +495,7 @@ def main() -> int:
             "(use --force-download to replace them)"
         )
 
-    handler = build_handler(log_prefix, assets_dir, tests_dir, verbose=args.verbose)
+    handler = build_handler(log_prefix, assets_dir, tests_dir, binary_out_dir, verbose=args.verbose)
     server = HTTPServer((args.host, args.port), handler)
 
     scheme = "http"
@@ -485,6 +512,7 @@ def main() -> int:
     print(f"Listening on {scheme}://{args.host}:{args.port}/")
     print(f"Logging POST requests with prefix: {log_prefix}")
     print("Per-type logs: <prefix>.text_plain.log, <prefix>.text_csv.log, <prefix>.application_octet_stream.log")
+    print(f"Binary uploads directory: {binary_out_dir}")
     print("GET / shows index of downloaded release binaries and test shell scripts")
     try:
         server.serve_forever()

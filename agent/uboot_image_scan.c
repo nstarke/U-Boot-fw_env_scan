@@ -39,6 +39,7 @@ static bool g_send_logs;
 static bool g_insecure;
 static uint32_t g_crc32_table[256];
 static int g_log_sock = -1;
+static const char *g_pull_binary_content_type = "application/octet-stream";
 static const char *g_output_http_uri = NULL;
 static char *g_output_http_buf = NULL;
 static size_t g_output_http_len;
@@ -1264,7 +1265,7 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 	}
 
 	if (uboot_http_post(output_http_uri, img, (size_t)total_size,
-			 "application/octet-stream", g_insecure,
+			 g_pull_binary_content_type, g_insecure,
 			 g_verbose,
 			 errbuf, sizeof(errbuf)) < 0) {
 		err_printf("Failed HTTP POST to %s: %s\n", output_http_uri, errbuf[0] ? errbuf : "unknown error");
