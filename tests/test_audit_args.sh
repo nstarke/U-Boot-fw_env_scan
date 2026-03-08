@@ -12,7 +12,7 @@ BIN="$REPO_ROOT/uboot_audit"
 require_binary "$BIN"
 print_section "audit subcommand argument coverage"
 
-TMP_DIR="$(mktemp -d)"
+TMP_DIR="$(mktemp -d /tmp/test_audit_args.XXXXXX)"
 TMP_BLOB="$TMP_DIR/sample.fit"
 TMP_PEM="$TMP_DIR/sample.pem"
 printf 'fit-placeholder' >"$TMP_BLOB"

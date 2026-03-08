@@ -79,7 +79,7 @@ run_exact_case() {
     expected_rc="$2"
     shift 2
 
-    log="$(mktemp)"
+    log="$(mktemp /tmp/test_log.XXXXXX)"
     run_with_output_override "$@" >"$log" 2>&1
     rc=$?
 
@@ -99,7 +99,7 @@ run_accept_case() {
     name="$1"
     shift
 
-    log="$(mktemp)"
+    log="$(mktemp /tmp/test_log.XXXXXX)"
     run_with_output_override "$@" >"$log" 2>&1
     rc=$?
 
