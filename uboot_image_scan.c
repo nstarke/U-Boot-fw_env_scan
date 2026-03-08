@@ -388,17 +388,20 @@ static void usage(const char *prog)
 		"Usage: %s [--verbose] [--dev <device>] [--step <bytes>] [--allow-text]\n"
 		"       %s --pull --dev <device> --offset <bytes> --output <IPv4:port>\n"
 		"       %s --find-address --dev <device> --offset <bytes>\n"
+		"       %s [--skip-mtd] [--skip-ubi]\n"
 		"  no args: scan /dev/mtdblock*, /dev/mtd*, /dev/ubi*_* and /dev/ubiblock*_* for U-Boot image signatures\n"
 		"  --verbose: print scan progress\n"
 		"  --dev: scan only a specific device\n"
 		"  --step: step size when scanning (default: 0x1000)\n"
 		"  --allow-text: also match plain 'U-Boot' string (higher false-positive risk)\n"
+		"  --skip-mtd: skip MTD and mtdblock scan targets\n"
+		"  --skip-ubi: skip UBI and ubiblock scan targets\n"
 		"  --send-logs: send tool log output to --output IPv4:port\n"
 		"  --pull: read image from --dev at --offset and stream bytes to --output\n"
 		"  --find-address: print image load address from header/FIT data\n"
 		"  --offset: byte offset of image header for --pull\n"
 		"  --output: IPv4:TCPPort destination for --pull\n",
-		prog, prog, prog);
+		prog, prog, prog, prog);
 }
 
 static int find_image_load_address(const char *dev, uint64_t offset)
@@ -644,6 +647,8 @@ int fw_image_scan_main(int argc, char **argv)
 	bool pull_mode = false;
 	bool find_address = false;
 	bool offset_set = false;
+	bool skip_mtd = false;
+	bool skip_ubi = false;
 	int opt;
 	int total_hits = 0;
 
@@ -666,11 +671,13 @@ int fw_image_scan_main(int argc, char **argv)
 		{ "find-address", no_argument, NULL, 'a' },
 		{ "send-logs", no_argument, NULL, 'L' },
 		{ "allow-text", no_argument, NULL, 't' },
+		{ "skip-mtd", no_argument, NULL, 'M' },
+		{ "skip-ubi", no_argument, NULL, 'U' },
 		{ "help", no_argument, NULL, 'h' },
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvd:s:o:p:PtaL", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvd:s:o:p:PtaLMU", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
@@ -704,6 +711,12 @@ int fw_image_scan_main(int argc, char **argv)
 			break;
 		case 't':
 			g_allow_text = true;
+			break;
+		case 'M':
+			skip_mtd = true;
+			break;
+		case 'U':
+			skip_ubi = true;
 			break;
 		default:
 			usage(argv[0]);
@@ -760,8 +773,10 @@ int fw_image_scan_main(int argc, char **argv)
 		return find_image_load_address(dev_override, pull_offset);
 	}
 
-	fw_ensure_mtd_nodes(g_verbose);
-	fw_ensure_ubi_nodes(g_verbose);
+	if (!skip_mtd)
+		fw_ensure_mtd_nodes(g_verbose);
+	if (!skip_ubi)
+		fw_ensure_ubi_nodes(g_verbose);
 
 	if (dev_override) {
 		int hits = scan_dev_for_image(dev_override, step);
@@ -769,11 +784,15 @@ int fw_image_scan_main(int argc, char **argv)
 	}
 
 	glob_t g;
+	unsigned int scan_flags = 0;
+
+	if (!skip_mtd)
+		scan_flags |= (FW_SCAN_GLOB_MTDBLOCK | FW_SCAN_GLOB_MTDCHAR);
+	if (!skip_ubi)
+		scan_flags |= (FW_SCAN_GLOB_UBI | FW_SCAN_GLOB_UBIBLOCK);
+
 	if (fw_glob_scan_devices(&g,
-			FW_SCAN_GLOB_MTDBLOCK |
-			FW_SCAN_GLOB_MTDCHAR |
-			FW_SCAN_GLOB_UBI |
-			FW_SCAN_GLOB_UBIBLOCK) < 0)
+			scan_flags) < 0)
 		return 1;
 
 	for (size_t i = 0; i < g.gl_pathc; i++) {

@@ -27,6 +27,7 @@ void fw_ensure_mtd_nodes(bool verbose);
 int fw_ensure_mtd_nodes_collect(bool verbose, char ***created_nodes, size_t *created_count);
 void fw_free_created_nodes(char **nodes, size_t count);
 void fw_ensure_ubi_nodes(bool verbose);
+int fw_ensure_ubi_nodes_collect(bool verbose, char ***created_nodes, size_t *created_count);
 
 int fw_parse_u64(const char *s, uint64_t *out);
 uint32_t fw_read_be32(const uint8_t *p);

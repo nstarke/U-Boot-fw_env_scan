@@ -220,7 +220,7 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 
 static void usage(const char *prog)
 {
-	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [--skip-remove] [<dev:step> ...]\n"
+	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [--skip-remove] [--skip-mtd] [--skip-ubi] [<dev:step> ...]\n"
 		"             [--output <ip:port>]\n", prog);
 }
 
@@ -233,8 +233,12 @@ int fw_env_scan_main(int argc, char **argv)
 	const char *dev_override = NULL;
 	const char *output_target = NULL;
 	bool skip_remove = false;
+	bool skip_mtd = false;
+	bool skip_ubi = false;
 	char **created_mtdblock_nodes = NULL;
 	size_t created_mtdblock_count = 0;
+	char **created_ubi_nodes = NULL;
+	size_t created_ubi_count = 0;
 	int ret = 0;
 	int argi;
 	int opt;
@@ -255,11 +259,13 @@ int fw_env_scan_main(int argc, char **argv)
 		{ "brutefoce", no_argument, NULL, 'b' },
 		{ "bruteforce", no_argument, NULL, 'b' },
 		{ "skip-remove", no_argument, NULL, 'R' },
+		{ "skip-mtd", no_argument, NULL, 'M' },
+		{ "skip-ubi", no_argument, NULL, 'U' },
 		{ "output", required_argument, NULL, 'o' },
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:R", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:RMU", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h': usage(argv[0]); return 0;
 		case 'v': g_verbose = true; break;
@@ -268,6 +274,8 @@ int fw_env_scan_main(int argc, char **argv)
 		case 'd': dev_override = optarg; break;
 		case 'b': g_bruteforce = true; break;
 		case 'R': skip_remove = true; break;
+		case 'M': skip_mtd = true; break;
+		case 'U': skip_ubi = true; break;
 		case 'o': output_target = optarg; break;
 		default: usage(argv[0]); return 2;
 		}
@@ -290,8 +298,10 @@ int fw_env_scan_main(int argc, char **argv)
 	}
 
 	fw_crc32_init(crc32_table);
-	fw_ensure_mtd_nodes_collect(g_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
-	fw_ensure_ubi_nodes(g_verbose);
+	if (!skip_mtd)
+		fw_ensure_mtd_nodes_collect(g_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
+	if (!skip_ubi)
+		fw_ensure_ubi_nodes_collect(g_verbose, &created_ubi_nodes, &created_ubi_count);
 
 	if (dev_override) {
 		if (!strncmp(dev_override, "/dev/mtd", 8) && strncmp(dev_override, "/dev/mtdblock", 13)) {
@@ -322,8 +332,14 @@ one_scan_done:
 
 	if (argi >= argc) {
 		glob_t g;
-		if (fw_glob_scan_devices(&g,
-				FW_SCAN_GLOB_MTDBLOCK | FW_SCAN_GLOB_UBI | FW_SCAN_GLOB_UBIBLOCK) < 0)
+		unsigned int scan_flags = 0;
+
+		if (!skip_mtd)
+			scan_flags |= FW_SCAN_GLOB_MTDBLOCK;
+		if (!skip_ubi)
+			scan_flags |= (FW_SCAN_GLOB_UBI | FW_SCAN_GLOB_UBIBLOCK);
+
+		if (fw_glob_scan_devices(&g, scan_flags) < 0)
 			goto scan_fail;
 		for (size_t gi = 0; gi < g.gl_pathc; gi++) {
 			const char *dev = g.gl_pathv[gi];
@@ -382,8 +398,14 @@ out:
 				err_printf("Warning: failed to remove created node %s: %s\n",
 					created_mtdblock_nodes[i], strerror(errno));
 		}
+		for (size_t i = 0; i < created_ubi_count; i++) {
+			if (unlink(created_ubi_nodes[i]) < 0 && errno != ENOENT)
+				err_printf("Warning: failed to remove created node %s: %s\n",
+					created_ubi_nodes[i], strerror(errno));
+		}
 	}
 	fw_free_created_nodes(created_mtdblock_nodes, created_mtdblock_count);
+	fw_free_created_nodes(created_ubi_nodes, created_ubi_count);
 	if (g_output_sock >= 0)
 		close(g_output_sock);
 	return ret;

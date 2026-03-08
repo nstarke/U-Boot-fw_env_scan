@@ -536,7 +536,7 @@ void fw_ensure_mtd_nodes(bool verbose)
 	fw_ensure_mtd_nodes_collect(verbose, NULL, NULL);
 }
 
-void fw_ensure_ubi_nodes(bool verbose)
+int fw_ensure_ubi_nodes_collect(bool verbose, char ***created_nodes, size_t *created_count)
 {
 	DIR *dir;
 	struct dirent *de;
@@ -580,7 +580,7 @@ void fw_ensure_ubi_nodes(bool verbose)
 				continue;
 
 			create_node_if_missing(devnode, S_IFCHR | 0600, makedev(major, minor), verbose,
-				NULL, NULL);
+				created_nodes, created_count);
 		}
 
 		closedir(dir);
@@ -588,7 +588,7 @@ void fw_ensure_ubi_nodes(bool verbose)
 
 	dir = opendir("/sys/class/block");
 	if (!dir)
-		return;
+		return 0;
 
 	while ((de = readdir(dir))) {
 		unsigned int ubi, vol;
@@ -621,8 +621,14 @@ void fw_ensure_ubi_nodes(bool verbose)
 			continue;
 
 		create_node_if_missing(devnode, S_IFBLK | 0600, makedev(major, minor), verbose,
-			NULL, NULL);
+			created_nodes, created_count);
 	}
 
 	closedir(dir);
+	return 0;
+}
+
+void fw_ensure_ubi_nodes(bool verbose)
+{
+	fw_ensure_ubi_nodes_collect(verbose, NULL, NULL);
 }
