@@ -5,6 +5,7 @@
 - [`uboot_audit env` Command](env-command.md)
 - [`uboot_audit image` Command](image-command.md)
 - [`uboot_audit audit` Command](audit-command.md)
+- [`uboot_audit dmesg` Command](dmesg-command.md)
 - [Audit Rules Reference](audit-rules.md)
 - [Tests](tests.md)
 - [Web Helper Server](web-helper-server.md)

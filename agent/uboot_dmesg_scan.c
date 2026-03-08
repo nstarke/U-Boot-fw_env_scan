@@ -1,0 +1,275 @@
+// SPDX-License-Identifier: MIT License - Copyright (c) 2026 Nicholas Starke
+
+#include "uboot_scan.h"
+
+#include <errno.h>
+#include <getopt.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+static bool g_verbose;
+static bool g_insecure;
+static int g_output_sock = -1;
+static const char *g_output_http_uri = NULL;
+static char *g_output_http_buf = NULL;
+static size_t g_output_http_len;
+static size_t g_output_http_cap;
+
+static void send_to_output_socket(const char *buf, size_t len)
+{
+	while (g_output_sock >= 0 && len) {
+		ssize_t n = send(g_output_sock, buf, len, 0);
+		if (n <= 0) {
+			close(g_output_sock);
+			g_output_sock = -1;
+			return;
+		}
+		buf += n;
+		len -= (size_t)n;
+	}
+}
+
+static void append_output_http_buffer(const char *buf, size_t len)
+{
+	char *tmp;
+	size_t need;
+	size_t new_cap;
+
+	if (!g_output_http_uri || !buf || !len)
+		return;
+
+	need = g_output_http_len + len + 1;
+	if (need > g_output_http_cap) {
+		new_cap = g_output_http_cap ? g_output_http_cap : 1024;
+		while (new_cap < need)
+			new_cap *= 2;
+
+		tmp = realloc(g_output_http_buf, new_cap);
+		if (!tmp)
+			return;
+		g_output_http_buf = tmp;
+		g_output_http_cap = new_cap;
+	}
+
+	memcpy(g_output_http_buf + g_output_http_len, buf, len);
+	g_output_http_len += len;
+	g_output_http_buf[g_output_http_len] = '\0';
+}
+
+static void emit_v(FILE *stream, const char *fmt, va_list ap)
+{
+	va_list aq;
+	char stack[1024];
+	char *dyn = NULL;
+	int needed;
+
+	va_copy(aq, ap);
+	vfprintf(stream, fmt, ap);
+	fflush(stream);
+
+	needed = vsnprintf(stack, sizeof(stack), fmt, aq);
+	va_end(aq);
+
+	if (needed < 0)
+		return;
+
+	if ((size_t)needed < sizeof(stack)) {
+		send_to_output_socket(stack, (size_t)needed);
+		append_output_http_buffer(stack, (size_t)needed);
+		return;
+	}
+
+	dyn = malloc((size_t)needed + 1);
+	if (!dyn)
+		return;
+
+	va_copy(aq, ap);
+	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
+	va_end(aq);
+	send_to_output_socket(dyn, (size_t)needed);
+	append_output_http_buffer(dyn, (size_t)needed);
+	free(dyn);
+}
+
+static void out_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	emit_v(stdout, fmt, ap);
+	va_end(ap);
+}
+
+static void err_printf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	emit_v(stderr, fmt, ap);
+	va_end(ap);
+}
+
+static int flush_output_http_buffer(void)
+{
+	char errbuf[256];
+
+	if (!g_output_http_uri)
+		return 0;
+
+	if (g_output_http_len == 0)
+		return 0;
+
+	if (uboot_http_post(g_output_http_uri,
+			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
+			 g_output_http_len,
+			 "text/plain; charset=utf-8",
+			 g_insecure,
+			 g_verbose,
+			 errbuf,
+			 sizeof(errbuf)) < 0) {
+		err_printf("Failed to POST dmesg output to %s: %s\n", g_output_http_uri,
+			   errbuf[0] ? errbuf : "unknown error");
+		return -1;
+	}
+
+	g_output_http_len = 0;
+	if (g_output_http_buf)
+		g_output_http_buf[0] = '\0';
+
+	return 0;
+}
+
+static void usage(const char *prog)
+{
+	err_printf("Usage: %s [--verbose] [--output-tcp <ip:port>] [--output-http <http://host:port/path>] [--output-https <https://host:port/path>] [--insecure]\n",
+		prog);
+}
+
+int uboot_dmesg_scan_main(int argc, char **argv)
+{
+	const char *output_tcp_target = NULL;
+	const char *output_http_target = NULL;
+	const char *output_https_target = NULL;
+	FILE *fp = NULL;
+	char line[4096];
+	int ret = 0;
+	int opt;
+
+	optind = 1;
+	g_verbose = false;
+	g_insecure = false;
+	if (g_output_sock >= 0) {
+		close(g_output_sock);
+		g_output_sock = -1;
+	}
+
+	static const struct option long_opts[] = {
+		{ "help", no_argument, NULL, 'h' },
+		{ "verbose", no_argument, NULL, 'v' },
+		{ "output-tcp", required_argument, NULL, 'o' },
+		{ "output-http", required_argument, NULL, 'O' },
+		{ "output-https", required_argument, NULL, 'T' },
+		{ "insecure", no_argument, NULL, 'k' },
+		{ 0, 0, 0, 0 }
+	};
+
+	while ((opt = getopt_long(argc, argv, "hvo:O:T:k", long_opts, NULL)) != -1) {
+		switch (opt) {
+		case 'h':
+			usage(argv[0]);
+			return 0;
+		case 'v':
+			g_verbose = true;
+			break;
+		case 'o':
+			output_tcp_target = optarg;
+			break;
+		case 'O':
+			output_http_target = optarg;
+			break;
+		case 'T':
+			output_https_target = optarg;
+			break;
+		case 'k':
+			g_insecure = true;
+			break;
+		default:
+			usage(argv[0]);
+			return 2;
+		}
+	}
+
+	if (optind < argc) {
+		usage(argv[0]);
+		return 2;
+	}
+
+	if (output_tcp_target && *output_tcp_target) {
+		g_output_sock = uboot_connect_tcp_ipv4(output_tcp_target);
+		if (g_output_sock < 0) {
+			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_tcp_target);
+			ret = 2;
+			goto out;
+		}
+	}
+
+	if (output_http_target && *output_http_target) {
+		if (strncmp(output_http_target, "http://", 7)) {
+			err_printf("Invalid --output-http URI (expected http://host:port/...): %s\n", output_http_target);
+			ret = 2;
+			goto out;
+		}
+		g_output_http_uri = output_http_target;
+	}
+
+	if (output_https_target && *output_https_target) {
+		if (strncmp(output_https_target, "https://", 8)) {
+			err_printf("Invalid --output-https URI (expected https://host:port/...): %s\n", output_https_target);
+			ret = 2;
+			goto out;
+		}
+		if (g_output_http_uri) {
+			err_printf("Use only one of --output-http or --output-https\n");
+			ret = 2;
+			goto out;
+		}
+		g_output_http_uri = output_https_target;
+	}
+
+	if (g_verbose)
+		err_printf("Collecting dmesg output\n");
+
+	fp = popen("dmesg", "r");
+	if (!fp) {
+		err_printf("Failed to execute dmesg: %s\n", strerror(errno));
+		ret = 1;
+		goto out;
+	}
+
+	while (fgets(line, sizeof(line), fp))
+		out_printf("%s", line);
+
+	if (pclose(fp) != 0 && ret == 0)
+		ret = 1;
+	fp = NULL;
+
+out:
+	if (fp)
+		(void)pclose(fp);
+	if (g_output_sock >= 0)
+		close(g_output_sock);
+	if (flush_output_http_buffer() < 0 && ret == 0)
+		ret = 1;
+	free(g_output_http_buf);
+	g_output_http_buf = NULL;
+	g_output_http_len = 0;
+	g_output_http_cap = 0;
+	g_output_http_uri = NULL;
+	return ret;
+}

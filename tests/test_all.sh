@@ -56,7 +56,8 @@ rc=0
 for test_script in \
     "$SCRIPT_DIR/test_env_args.sh" \
     "$SCRIPT_DIR/test_image_args.sh" \
-    "$SCRIPT_DIR/test_audit_args.sh"
+    "$SCRIPT_DIR/test_audit_args.sh" \
+    "$SCRIPT_DIR/test_dmesg_args.sh"
 do
     echo
     echo "===== Running $(basename "$test_script") ====="

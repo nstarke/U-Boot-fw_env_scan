@@ -30,6 +30,7 @@ bash tests/test_all.sh
 - `tests/test_env_args.sh`
 - `tests/test_image_args.sh`
 - `tests/test_audit_args.sh`
+- `tests/test_dmesg_args.sh`
 
 It returns non-zero if any test group fails.
 
@@ -39,6 +40,7 @@ It returns non-zero if any test group fails.
 sh tests/test_env_args.sh
 sh tests/test_image_args.sh
 sh tests/test_audit_args.sh
+sh tests/test_dmesg_args.sh
 ```
 
 ## What each test script covers
@@ -46,6 +48,7 @@ sh tests/test_audit_args.sh
 - `test_env_args.sh`: validates accepted/expected behavior of `env` arguments.
 - `test_image_args.sh`: validates accepted/expected behavior of `image` arguments and mode combinations.
 - `test_audit_args.sh`: validates accepted/expected behavior of `audit` arguments, output formats, and rule selections.
+- `test_dmesg_args.sh`: validates accepted/expected behavior of `dmesg` arguments and `--output-format` warning behavior.
 
 These are argument/CLI behavior coverage tests, not full hardware integration tests.
 

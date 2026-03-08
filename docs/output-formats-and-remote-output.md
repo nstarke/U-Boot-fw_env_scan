@@ -18,3 +18,8 @@ Remote output notes:
 - `image --output-http <http://host:port/path>` can be used to POST formatted scan/find-address output, or to POST pulled image bytes when used with `--pull`.
 - `image --output-https <https://host:port/path>` can be used to POST formatted scan/find-address output, or to POST pulled image bytes when used with `--pull`, using embedded CA certificates.
 - `image --insecure` disables TLS certificate and hostname verification for HTTPS output.
+- `dmesg --output-tcp <ip:port>` sends dmesg text output to TCP.
+- `dmesg --output-http <http://host:port/path>` sends dmesg text output in a single HTTP POST request with `Content-Type: text/plain; charset=utf-8`.
+- `dmesg --output-https <https://host:port/path>` sends dmesg text output in a single HTTPS POST request with `Content-Type: text/plain; charset=utf-8`, using embedded CA certificates.
+- `dmesg --insecure` disables TLS certificate and hostname verification for HTTPS output.
+- `--output-format` does not affect `dmesg`; if specified, a warning is emitted.
