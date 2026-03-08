@@ -40,6 +40,10 @@ jobs:
             zig_targets: x86-linux-musl,i386-linux-musl
           - name: x86_64
             zig_targets: x86_64-linux-musl
+          - name: riscv32
+            zig_targets: riscv32-linux-musl,riscv32-linux-gnu
+          - name: riscv64
+            zig_targets: riscv64-linux-musl,riscv64-linux-gnu
 
     steps:
       - name: Checkout
