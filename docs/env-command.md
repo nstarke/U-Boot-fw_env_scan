@@ -1,0 +1,71 @@
+# `uboot_audit env` Command
+
+Scans MTD/UBI plus block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`) for blocks that resemble a valid U-Boot environment (CRC-verified by default), then prints candidate `fw_env.config` lines.
+
+## `env` arguments
+
+- `--verbose` — print scan progress and non-hit details
+- `--size <env_size>` — fixed environment size (for example `0x10000`)
+- `--hint <hint>` — override hint string used for positive labeling
+- `--dev <device>` — scan only one device (step inferred from sysfs/proc)
+- `--brutefoce` / `--bruteforce` — skip CRC checks and match by hint strings only
+- `--skip-remove` — keep any created helper `/dev/mtdblock*`/UBI device nodes after run
+- `--skip-mtd` — skip MTD/mtdblock scan targets and helper node handling
+- `--skip-ubi` — skip UBI/ubiblock scan targets and helper node handling
+- `--skip-sd` — skip `/dev/sd*` scan targets
+- `--skip-emmc` — skip `/dev/mmcblk*` scan targets
+- `--parse-vars` — print parsed key/value variables from candidate environments (parsed via `libubootenv`)
+- `--output-config[=<path>]` — write discovered `fw_env.config` lines to file (default `fw_env.config`)
+- `--output-tcp <IPv4:port>` — duplicate output to TCP destination
+- `--output-http <http://host:port/path>` — duplicate output to HTTP endpoint via POST
+- `--output-https <https://host:port/path>` — duplicate output to HTTPS endpoint via POST
+- `--insecure` — disable TLS certificate and hostname verification for HTTPS output
+- `--write <path>` — apply env updates from text file (native `fw_setenv`-style behavior)
+
+## `--write` behavior
+
+- Uses `./fw_env.config` for write settings and applies updates through `libubootenv` (built from source in `third_party/libubootenv`).
+  - If `./fw_env.config` exists, it is used directly.
+  - If it does not exist, the tool first runs scan logic to generate it, then writes.
+- Input file format (similar to `fw_setenv -s`):
+  - `name=value` or `name value` → set variable
+  - `name` (no value) → delete variable
+  - blank lines and `#` comments are ignored
+- Validations performed:
+  - variable name must be non-empty
+  - variable name must not contain `=`
+  - variable name must not contain whitespace or control characters
+  - sensitive variable updates/deletes require interactive confirmation:
+    - prompt: `Modifying $ENVIRONMENT_VARIABLE_NAME might render the host unbootable.  Do you wish to proceed?`
+    - only `Y`/`y` proceeds; any other response skips that variable write/delete
+  - existing environment CRC must be valid before writing
+  - updated environment must fit configured environment size
+- Environment persistence (including CRC/redundant handling) is performed by `libubootenv`.
+
+## `env` examples
+
+```bash
+./uboot_audit env
+./uboot_audit --output-format json env
+./uboot_audit env --verbose
+./uboot_audit env --size 0x10000
+./uboot_audit env --dev /dev/mtd3 --size 0x10000
+./uboot_audit env --size 0x10000 /dev/mtd0:0x10000 /dev/mtd1:0x20000
+./uboot_audit env --output-tcp 192.168.1.50:5000 --verbose
+./uboot_audit env --output-http http://192.168.1.50:5000/env --verbose
+./uboot_audit env --output-https https://192.168.1.50:5443/env --verbose
+./uboot_audit env --write ./new_env.txt
+```
+
+For machine-readable output:
+
+```bash
+./uboot_audit --output-format csv env
+./uboot_audit --output-format json env
+```
+
+Example candidate line:
+
+```text
+fw_env.config line: /dev/mtd0 0x40000 0x10000 0x10000 0x1
+```
