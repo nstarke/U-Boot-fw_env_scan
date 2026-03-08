@@ -56,23 +56,48 @@ else
     exit 1
 fi
 
-for script_path in "$SCRIPT_DIR"/*.sh; do
-    script_file="$(basename "$script_path")"
+fetch_to_file() {
+    url="$1"
+    out_file="$2"
+
+    if [ "$downloader" = "curl" ]; then
+        curl -fsSL "$url" -o "$out_file"
+    else
+        wget -qO "$out_file" "$url"
+    fi
+}
+
+INDEX_FILE="$(mktemp)"
+SCRIPT_LIST_FILE="$(mktemp)"
+cleanup() {
+    rm -f "$INDEX_FILE" "$SCRIPT_LIST_FILE"
+}
+trap cleanup EXIT HUP INT TERM
+
+echo "fetching index: $BASE_URL/"
+fetch_to_file "$BASE_URL/" "$INDEX_FILE"
+
+grep -Eo '/?tests/[^"[:space:]<>]+\.sh' "$INDEX_FILE" | \
+    sed 's#^/##' | sort -u >"$SCRIPT_LIST_FILE"
+
+if [ ! -s "$SCRIPT_LIST_FILE" ]; then
+    echo "error: no test shell scripts found in index at $BASE_URL/"
+    exit 1
+fi
+
+while IFS= read -r rel_path; do
+    script_file="$(basename "$rel_path")"
 
     if [ "$script_file" = "$SCRIPT_NAME" ]; then
         continue
     fi
 
-    url="$BASE_URL/$script_file"
+    url="$BASE_URL/$rel_path"
     dest="$SCRIPT_DIR/$script_file"
 
     echo "downloading $url -> $dest"
 
-    if [ "$downloader" = "curl" ]; then
-        curl -fsSL "$url" -o "$dest"
-    else
-        wget -qO "$dest" "$url"
-    fi
-done
+    fetch_to_file "$url" "$dest"
+done <"$SCRIPT_LIST_FILE"
 
 echo "done"
