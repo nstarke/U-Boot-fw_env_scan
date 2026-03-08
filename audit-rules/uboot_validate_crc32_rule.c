@@ -15,13 +15,13 @@ static int ensure_fw_env_config_exists(void)
 		NULL,
 	};
 
-	if (access("fw_env.config", F_OK) == 0)
+	if (access("uboot_env.config", F_OK) == 0)
 		return 0;
 
-	return fw_env_scan_main(2, argv);
+	return uboot_env_scan_main(2, argv);
 }
 
-static int run_validate_crc32(const struct fw_audit_input *input, char *message, size_t message_len)
+static int run_validate_crc32(const struct uboot_audit_input *input, char *message, size_t message_len)
 {
 	uint32_t stored_le;
 	uint32_t stored_be;
@@ -33,7 +33,7 @@ static int run_validate_crc32(const struct fw_audit_input *input, char *message,
 	if (env_scan_rc != 0) {
 		if (message && message_len)
 			snprintf(message, message_len,
-				 "fw_env.config not found and env scan failed (rc=%d)", env_scan_rc);
+				 "uboot_env.config not found and env scan failed (rc=%d)", env_scan_rc);
 		return -1;
 	}
 
@@ -47,11 +47,11 @@ static int run_validate_crc32(const struct fw_audit_input *input, char *message,
 		((uint32_t)input->data[1] << 8) |
 		((uint32_t)input->data[2] << 16) |
 		((uint32_t)input->data[3] << 24);
-	stored_be = fw_read_be32(input->data);
+	stored_be = uboot_read_be32(input->data);
 
-	calc_std = fw_crc32_calc(input->crc32_table, input->data + 4, input->data_len - 4);
+	calc_std = uboot_crc32_calc(input->crc32_table, input->data + 4, input->data_len - 4);
 	if (input->data_len > 5)
-		calc_redund = fw_crc32_calc(input->crc32_table, input->data + 5, input->data_len - 5);
+		calc_redund = uboot_crc32_calc(input->crc32_table, input->data + 5, input->data_len - 5);
 
 	if (calc_std == stored_le || calc_std == stored_be) {
 		if (message && message_len) {
@@ -84,7 +84,7 @@ static int run_validate_crc32(const struct fw_audit_input *input, char *message,
 	return 1;
 }
 
-static const struct fw_audit_rule uboot_validate_crc32_rule = {
+static const struct uboot_audit_rule uboot_validate_crc32_rule = {
 	.name = "uboot_validate_crc32",
 	.description = "Validate U-Boot environment CRC32 checksum (standard/redundant layouts)",
 	.run = run_validate_crc32,

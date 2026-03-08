@@ -3,6 +3,10 @@ CFLAGS  ?= -O2 -Wall -Wextra
 LDFLAGS ?=
 LDLIBS  ?=
 
+ifneq (,$(findstring zig cc,$(CC)))
+LDFLAGS += -Wl,--no-gc-sections
+endif
+
 empty :=
 space := $(empty) $(empty)
 CC_TAG := $(subst $(space),_,$(CC))

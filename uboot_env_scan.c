@@ -41,12 +41,12 @@ static size_t g_output_http_cap;
 static FILE *g_output_config_fp = NULL;
 static void out_printf(const char *fmt, ...);
 static void err_printf(const char *fmt, ...);
-enum fw_output_format {
+enum uboot_output_format {
 	FW_OUTPUT_TXT = 0,
 	FW_OUTPUT_CSV,
 	FW_OUTPUT_JSON,
 };
-static enum fw_output_format g_output_format = FW_OUTPUT_TXT;
+static enum uboot_output_format g_output_format = FW_OUTPUT_TXT;
 static bool g_csv_header_emitted;
 
 static const char *env_http_content_type(void)
@@ -160,7 +160,7 @@ static void emit_env_candidate_record(const char *dev, uint64_t off,
 		out_printf("  candidate offset=0x%jx  crc=%s-endian  %s\n", (uintmax_t)off,
 			crc_endian, has_known_vars ? "(has known vars)" : "(crc ok)");
 
-	out_printf("    fw_env.config line: %s 0x%jx 0x%jx 0x%jx 0x%jx\n",
+	out_printf("    uboot_env.config line: %s 0x%jx 0x%jx 0x%jx 0x%jx\n",
 		dev, (uintmax_t)cfg_off, (uintmax_t)env_size,
 		(uintmax_t)erase_size, (uintmax_t)sector_count);
 }
@@ -291,7 +291,7 @@ struct env_candidate {
 	bool crc_redundant;
 };
 
-struct fw_cfg_entry {
+struct uboot_cfg_entry {
 	char dev[256];
 	uint64_t off;
 	uint64_t env_size;
@@ -366,7 +366,7 @@ static int flush_output_http_buffer(void)
 	if (!g_output_http_uri)
 		return 0;
 
-	if (fw_http_post(g_output_http_uri,
+	if (uboot_http_post(g_output_http_uri,
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 env_http_content_type(),
@@ -452,7 +452,7 @@ static uint64_t parse_u64(const char *s)
 {
 	uint64_t v;
 
-	if (fw_parse_u64(s, &v)) {
+	if (uboot_parse_u64(s, &v)) {
 		err_printf("Invalid number: %s\n", s);
 		exit(2);
 	}
@@ -492,7 +492,7 @@ static bool file_exists(const char *path)
 	return stat(path, &st) == 0;
 }
 
-static bool fw_valid_var_name(const char *name)
+static bool uboot_valid_var_name(const char *name)
 {
 	if (!name || !*name)
 		return false;
@@ -507,7 +507,7 @@ static bool fw_valid_var_name(const char *name)
 	return true;
 }
 
-static bool fw_is_sensitive_env_var(const char *name)
+static bool uboot_is_sensitive_env_var(const char *name)
 {
 	static const char *sensitive_vars[] = {
 		"bootcmd",
@@ -531,7 +531,7 @@ static bool fw_is_sensitive_env_var(const char *name)
 	return false;
 }
 
-static bool fw_confirm_sensitive_write(const char *name)
+static bool uboot_confirm_sensitive_write(const char *name)
 {
 	char answer[32];
 
@@ -544,7 +544,7 @@ static bool fw_confirm_sensitive_write(const char *name)
 	return answer[0] == 'Y' || answer[0] == 'y';
 }
 
-static char *fw_trim(char *s)
+static char *uboot_trim(char *s)
 {
 	char *end;
 
@@ -635,7 +635,7 @@ static int env_unset_kv(struct env_kv *kvs, size_t *count, const char *name)
 	return 0;
 }
 
-static int parse_fw_config(const char *path, struct fw_cfg_entry out[2], size_t *out_count)
+static int parse_fw_config(const char *path, struct uboot_cfg_entry out[2], size_t *out_count)
 {
 	FILE *fp;
 	char line[1024];
@@ -651,7 +651,7 @@ static int parse_fw_config(const char *path, struct fw_cfg_entry out[2], size_t 
 	}
 
 	while (fgets(line, sizeof(line), fp)) {
-		char *s = fw_trim(line);
+		char *s = uboot_trim(line);
 		char dev[256], off_s[64], size_s[64], erase_s[64], sec_s[64];
 		uint64_t off, env_size, erase, sec;
 
@@ -659,26 +659,26 @@ static int parse_fw_config(const char *path, struct fw_cfg_entry out[2], size_t 
 			continue;
 
 		if (sscanf(s, "%255s %63s %63s %63s %63s", dev, off_s, size_s, erase_s, sec_s) != 5) {
-			err_printf("Invalid fw_env.config line: %s\n", s);
+			err_printf("Invalid uboot_env.config line: %s\n", s);
 			fclose(fp);
 			return -1;
 		}
 
-		if (fw_parse_u64(off_s, &off) || fw_parse_u64(size_s, &env_size) ||
-		    fw_parse_u64(erase_s, &erase) || fw_parse_u64(sec_s, &sec)) {
-			err_printf("Invalid numeric values in fw_env.config line: %s\n", s);
+		if (uboot_parse_u64(off_s, &off) || uboot_parse_u64(size_s, &env_size) ||
+		    uboot_parse_u64(erase_s, &erase) || uboot_parse_u64(sec_s, &sec)) {
+			err_printf("Invalid numeric values in uboot_env.config line: %s\n", s);
 			fclose(fp);
 			return -1;
 		}
 
 		if (!env_size || env_size < 8) {
-			err_printf("Invalid env size in fw_env.config line: %s\n", s);
+			err_printf("Invalid env size in uboot_env.config line: %s\n", s);
 			fclose(fp);
 			return -1;
 		}
 
 		if (count >= 2) {
-			err_printf("fw_env.config must contain one or two usable entries for --write\n");
+			err_printf("uboot_env.config must contain one or two usable entries for --write\n");
 			fclose(fp);
 			return -1;
 		}
@@ -700,7 +700,7 @@ static int parse_fw_config(const char *path, struct fw_cfg_entry out[2], size_t 
 	}
 
 	if (count == 2 && out[0].env_size != out[1].env_size) {
-		err_printf("Redundant entries in fw_env.config must use same env size\n");
+		err_printf("Redundant entries in uboot_env.config must use same env size\n");
 		return -1;
 	}
 
@@ -780,7 +780,7 @@ static int apply_write_script(const char *script_path, struct env_kv **kvs, size
 		bool delete_var = false;
 
 		lineno++;
-		s = fw_trim(line);
+		s = uboot_trim(line);
 		if (!*s || *s == '#')
 			continue;
 
@@ -788,28 +788,28 @@ static int apply_write_script(const char *script_path, struct env_kv **kvs, size
 		space = strpbrk(s, " \t");
 		if (eq && (!space || eq < space)) {
 			*eq = '\0';
-			name = fw_trim(s);
+			name = uboot_trim(s);
 			value = eq + 1;
 		} else {
 			if (space) {
 				*space = '\0';
-				name = fw_trim(s);
-				value = fw_trim(space + 1);
+				name = uboot_trim(s);
+				value = uboot_trim(space + 1);
 				if (!*value)
 					delete_var = true;
 			} else {
-				name = fw_trim(s);
+				name = uboot_trim(s);
 				delete_var = true;
 			}
 		}
 
-		if (!fw_valid_var_name(name)) {
+		if (!uboot_valid_var_name(name)) {
 			err_printf("Invalid variable name at %s:%lu\n", script_path, lineno);
 			fclose(fp);
 			return -1;
 		}
 
-		if (fw_is_sensitive_env_var(name) && !fw_confirm_sensitive_write(name)) {
+		if (uboot_is_sensitive_env_var(name) && !uboot_confirm_sensitive_write(name)) {
 			out_printf("Skipping update for %s\n", name);
 			continue;
 		}
@@ -865,7 +865,7 @@ static int build_env_region(const struct env_kv *kvs, size_t count, uint8_t *out
 	return 0;
 }
 
-static int read_env_copy(const struct fw_cfg_entry *cfg, uint8_t **out)
+static int read_env_copy(const struct uboot_cfg_entry *cfg, uint8_t **out)
 {
 	int fd;
 	uint8_t *buf;
@@ -906,8 +906,8 @@ static bool env_crc_matches(const uint8_t *buf, size_t env_size, size_t data_off
 		return false;
 
 	stored_le = read_le32(buf);
-	stored_be = fw_read_be32(buf);
-	calc = fw_crc32_calc(crc32_table, buf + data_off, env_size - data_off);
+	stored_be = uboot_read_be32(buf);
+	calc = uboot_crc32_calc(crc32_table, buf + data_off, env_size - data_off);
 	if (calc == stored_le) {
 		*is_le = true;
 		return true;
@@ -920,7 +920,7 @@ static bool env_crc_matches(const uint8_t *buf, size_t env_size, size_t data_off
 	return false;
 }
 
-static int write_env_copy(const struct fw_cfg_entry *cfg, const uint8_t *buf)
+static int write_env_copy(const struct uboot_cfg_entry *cfg, const uint8_t *buf)
 {
 	int fd;
 
@@ -949,7 +949,7 @@ static int write_env_copy(const struct fw_cfg_entry *cfg, const uint8_t *buf)
 
 static int perform_write_operation(const char *config_path, const char *script_path)
 {
-	struct fw_cfg_entry cfg[2];
+	struct uboot_cfg_entry cfg[2];
 	size_t cfg_count = 0;
 	bool redundant;
 	size_t data_off;
@@ -1008,9 +1008,9 @@ static int perform_write_operation(const char *config_path, const char *script_p
 	if (data_off == 5)
 		new0[4] = 0;
 	if (crc_le)
-		write_le32(new0, fw_crc32_calc(crc32_table, new0 + data_off, (size_t)cfg[0].env_size - data_off));
+		write_le32(new0, uboot_crc32_calc(crc32_table, new0 + data_off, (size_t)cfg[0].env_size - data_off));
 	else
-		write_be32(new0, fw_crc32_calc(crc32_table, new0 + data_off, (size_t)cfg[0].env_size - data_off));
+		write_be32(new0, uboot_crc32_calc(crc32_table, new0 + data_off, (size_t)cfg[0].env_size - data_off));
 
 	if (redundant) {
 		new1 = calloc(1, (size_t)cfg[1].env_size);
@@ -1021,9 +1021,9 @@ static int perform_write_operation(const char *config_path, const char *script_p
 		if (data_off == 5)
 			new1[4] = 1;
 		if (crc_le)
-			write_le32(new1, fw_crc32_calc(crc32_table, new1 + data_off, (size_t)cfg[1].env_size - data_off));
+			write_le32(new1, uboot_crc32_calc(crc32_table, new1 + data_off, (size_t)cfg[1].env_size - data_off));
 		else
-			write_be32(new1, fw_crc32_calc(crc32_table, new1 + data_off, (size_t)cfg[1].env_size - data_off));
+			write_be32(new1, uboot_crc32_calc(crc32_table, new1 + data_off, (size_t)cfg[1].env_size - data_off));
 	}
 
 	if (write_env_copy(&cfg[0], new0))
@@ -1148,7 +1148,7 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 	}
 
 	if (st.st_size == 0) {
-		uint64_t sz = fw_guess_size_any(dev);
+		uint64_t sz = uboot_guess_size_any(dev);
 		st.st_size = (off_t)sz;
 	}
 
@@ -1157,7 +1157,7 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 		return -1;
 	}
 
-	sysfs_erasesize = fw_guess_erasesize_from_sysfs(dev);
+	sysfs_erasesize = uboot_guess_erasesize_from_sysfs(dev);
 	erase_size = sysfs_erasesize ? sysfs_erasesize : step;
 	sector_count = erase_size ? ((env_size + erase_size - 1) / erase_size) : 0;
 
@@ -1172,10 +1172,10 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 			break;
 
 		uint32_t stored_le = read_le32(buf);
-		uint32_t stored_be = fw_read_be32(buf);
-		uint32_t calc = fw_crc32_calc(crc32_table, buf + 4, (size_t)env_size - 4);
+		uint32_t stored_be = uboot_read_be32(buf);
+		uint32_t calc = uboot_crc32_calc(crc32_table, buf + 4, (size_t)env_size - 4);
 		uint32_t calc_redund = (env_size > 5)
-			? fw_crc32_calc(crc32_table, buf + 5, (size_t)env_size - 5)
+			? uboot_crc32_calc(crc32_table, buf + 5, (size_t)env_size - 5)
 			: 0;
 		bool crc_ok_std = (calc == stored_le || calc == stored_be);
 		bool crc_ok_redund = (env_size > 5) && (calc_redund == stored_le || calc_redund == stored_be);
@@ -1245,7 +1245,7 @@ static void usage(const char *prog)
 		"             [--insecure]\n", prog);
 }
 
-int fw_env_scan_main(int argc, char **argv)
+int uboot_env_scan_main(int argc, char **argv)
 {
 	static const uint64_t common_sizes[] = { 0x1000, 0x2000, 0x4000, 0x8000, 0x10000, 0x20000, 0x40000, 0x80000 };
 	bool fixed_size = false;
@@ -1323,7 +1323,7 @@ int fw_env_scan_main(int argc, char **argv)
 		case 'S': skip_sd = true; break;
 		case 'E': skip_emmc = true; break;
 		case 'P': g_parse_vars = true; break;
-		case 'c': output_config_path = optarg ? optarg : "fw_env.config"; break;
+		case 'c': output_config_path = optarg ? optarg : "uboot_env.config"; break;
 		case 'o': output_tcp_target = optarg; break;
 		case 'O': output_http_target = optarg; break;
 		case 'T': output_https_target = optarg; break;
@@ -1349,33 +1349,33 @@ int fw_env_scan_main(int argc, char **argv)
 			ret = 2;
 			goto out;
 		}
-		if (output_config_path && strcmp(output_config_path, "fw_env.config")) {
-			err_printf("--write uses ./fw_env.config only\n");
+		if (output_config_path && strcmp(output_config_path, "uboot_env.config")) {
+			err_printf("--write uses ./uboot_env.config only\n");
 			ret = 2;
 			goto out;
 		}
-		if (file_exists("fw_env.config")) {
+		if (file_exists("uboot_env.config")) {
 			need_generate_config = false;
 		} else {
 			need_generate_config = true;
-			output_config_path = "fw_env.config";
+			output_config_path = "uboot_env.config";
 		}
 	}
 
 	if (write_mode && !need_generate_config) {
-		fw_crc32_init(crc32_table);
+		uboot_crc32_init(crc32_table);
 		if (!skip_mtd)
-			fw_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
+			uboot_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
 		if (!skip_ubi)
-			fw_ensure_ubi_nodes_collect(helper_verbose, &created_ubi_nodes, &created_ubi_count);
-		fw_ensure_block_nodes_collect(helper_verbose, !skip_sd, !skip_emmc,
+			uboot_ensure_ubi_nodes_collect(helper_verbose, &created_ubi_nodes, &created_ubi_count);
+		uboot_ensure_block_nodes_collect(helper_verbose, !skip_sd, !skip_emmc,
 			&created_block_nodes, &created_block_count);
-		ret = perform_write_operation("fw_env.config", write_script_path);
+		ret = perform_write_operation("uboot_env.config", write_script_path);
 		goto out;
 	}
 
 	if (output_tcp_target && *output_tcp_target) {
-		g_output_sock = fw_connect_tcp_ipv4(output_tcp_target);
+		g_output_sock = uboot_connect_tcp_ipv4(output_tcp_target);
 		if (g_output_sock < 0) {
 			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_tcp_target);
 			ret = 2;
@@ -1415,12 +1415,12 @@ int fw_env_scan_main(int argc, char **argv)
 		}
 	}
 
-	fw_crc32_init(crc32_table);
+	uboot_crc32_init(crc32_table);
 	if (!skip_mtd)
-		fw_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
+		uboot_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
 	if (!skip_ubi)
-		fw_ensure_ubi_nodes_collect(helper_verbose, &created_ubi_nodes, &created_ubi_count);
-	fw_ensure_block_nodes_collect(helper_verbose, !skip_sd, !skip_emmc,
+		uboot_ensure_ubi_nodes_collect(helper_verbose, &created_ubi_nodes, &created_ubi_count);
+	uboot_ensure_block_nodes_collect(helper_verbose, !skip_sd, !skip_emmc,
 		&created_block_nodes, &created_block_count);
 
 	if (dev_override) {
@@ -1430,7 +1430,7 @@ int fw_env_scan_main(int argc, char **argv)
 			goto out;
 		}
 
-		uint64_t step = fw_guess_step_any(dev_override);
+		uint64_t step = uboot_guess_step_any(dev_override);
 		if (!step)
 			goto scan_fail;
 		if (step > AUTO_SCAN_MAX_STEP)
@@ -1463,11 +1463,11 @@ one_scan_done:
 		if (!skip_sd)
 			scan_flags |= FW_SCAN_GLOB_SDBLK;
 
-		if (fw_glob_scan_devices(&g, scan_flags) < 0)
+		if (uboot_glob_scan_devices(&g, scan_flags) < 0)
 			goto scan_fail;
 		for (size_t gi = 0; gi < g.gl_pathc; gi++) {
 			const char *dev = g.gl_pathv[gi];
-			uint64_t step = fw_guess_step_any(dev);
+			uint64_t step = uboot_guess_step_any(dev);
 			if (!step)
 				continue;
 			if (step > AUTO_SCAN_MAX_STEP)
@@ -1522,7 +1522,7 @@ post_scan:
 			fclose(g_output_config_fp);
 			g_output_config_fp = NULL;
 		}
-		ret = perform_write_operation("fw_env.config", write_script_path);
+		ret = perform_write_operation("uboot_env.config", write_script_path);
 	}
 
 out:
@@ -1543,9 +1543,9 @@ out:
 					created_block_nodes[i], strerror(errno));
 		}
 	}
-	fw_free_created_nodes(created_mtdblock_nodes, created_mtdblock_count);
-	fw_free_created_nodes(created_ubi_nodes, created_ubi_count);
-	fw_free_created_nodes(created_block_nodes, created_block_count);
+	uboot_free_created_nodes(created_mtdblock_nodes, created_mtdblock_count);
+	uboot_free_created_nodes(created_ubi_nodes, created_ubi_count);
+	uboot_free_created_nodes(created_block_nodes, created_block_count);
 	if (g_output_config_fp) {
 		fclose(g_output_config_fp);
 		g_output_config_fp = NULL;

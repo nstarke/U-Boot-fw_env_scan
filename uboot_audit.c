@@ -15,8 +15,8 @@ static void usage(const char *prog)
 		"  --output-format <csv|json|txt>  Set output format for subcommands\n"
 		"\n"
 		"Subcommands:\n"
-		"  env     Scan for U-Boot environment candidates (fw_env_scan behavior)\n"
-		"  image   Scan or extract U-Boot images (fw_image_scan behavior)\n"
+		"  env     Scan for U-Boot environment candidates (uboot_env_scan behavior)\n"
+		"  image   Scan or extract U-Boot images (uboot_image_scan behavior)\n"
 		"  audit   Run audit rules against device data\n"
 		"\n"
 		"Examples:\n"
@@ -84,13 +84,13 @@ int main(int argc, char **argv)
 	}
 
 	if (!strcmp(argv[cmd_idx], "env"))
-		return fw_env_scan_main(argc - cmd_idx, argv + cmd_idx);
+		return uboot_env_scan_main(argc - cmd_idx, argv + cmd_idx);
 
 	if (!strcmp(argv[cmd_idx], "image"))
-		return fw_image_scan_main(argc - cmd_idx, argv + cmd_idx);
+		return uboot_image_scan_main(argc - cmd_idx, argv + cmd_idx);
 
 	if (!strcmp(argv[cmd_idx], "audit"))
-		return fw_audit_scan_main(argc - cmd_idx, argv + cmd_idx);
+		return uboot_audit_scan_main(argc - cmd_idx, argv + cmd_idx);
 
 	fprintf(stderr, "Unknown subcommand: %s\n\n", argv[cmd_idx]);
 	usage(argv[0]);

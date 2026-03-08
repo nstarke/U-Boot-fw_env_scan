@@ -57,7 +57,7 @@ static uint64_t read_u64_from_file(const char *path)
 	return (uint64_t)v;
 }
 
-int fw_parse_u64(const char *s, uint64_t *out)
+int uboot_parse_u64(const char *s, uint64_t *out)
 {
 	char *end;
 	unsigned long long v;
@@ -76,7 +76,7 @@ int fw_parse_u64(const char *s, uint64_t *out)
 	return 0;
 }
 
-uint32_t fw_read_be32(const uint8_t *p)
+uint32_t uboot_read_be32(const uint8_t *p)
 {
 	return ((uint32_t)p[0] << 24) |
 	       ((uint32_t)p[1] << 16) |
@@ -84,7 +84,7 @@ uint32_t fw_read_be32(const uint8_t *p)
 	       (uint32_t)p[3];
 }
 
-int fw_connect_tcp_ipv4(const char *spec)
+int uboot_connect_tcp_ipv4(const char *spec)
 {
 	char host[64];
 	char *colon;
@@ -126,7 +126,7 @@ int fw_connect_tcp_ipv4(const char *spec)
 	return sock;
 }
 
-int fw_send_all(int sock, const uint8_t *buf, size_t len)
+int uboot_send_all(int sock, const uint8_t *buf, size_t len)
 {
 	while (len) {
 		ssize_t n = send(sock, buf, len, 0);
@@ -138,7 +138,7 @@ int fw_send_all(int sock, const uint8_t *buf, size_t len)
 	return 0;
 }
 
-char *fw_http_uri_normalize_default_port(const char *uri, uint16_t default_port)
+char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_port)
 {
 	const char *scheme_end;
 	const char *authority;
@@ -206,7 +206,7 @@ char *fw_http_uri_normalize_default_port(const char *uri, uint16_t default_port)
 	return out;
 }
 
-int fw_http_post(const char *uri, const uint8_t *data, size_t len,
+int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 		 const char *content_type, bool insecure,
 		 char *errbuf, size_t errbuf_len)
 {
@@ -232,9 +232,9 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 
 	is_https = !strncmp(uri, "https://", 8);
 	if (!strncmp(uri, "http://", 7)) {
-		normalized_uri = fw_http_uri_normalize_default_port(uri, 80);
+		normalized_uri = uboot_http_uri_normalize_default_port(uri, 80);
 	} else if (is_https) {
-		normalized_uri = fw_http_uri_normalize_default_port(uri, 443);
+		normalized_uri = uboot_http_uri_normalize_default_port(uri, 443);
 	}
 	if ((!strncmp(uri, "http://", 7) || is_https) && !normalized_uri) {
 		if (errbuf && errbuf_len)
@@ -285,8 +285,8 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
 		} else {
-			ca_blob.data = (void *)fw_default_ca_bundle_pem;
-			ca_blob.len = fw_default_ca_bundle_pem_len;
+			ca_blob.data = (void *)uboot_default_ca_bundle_pem;
+			ca_blob.len = uboot_default_ca_bundle_pem_len;
 			ca_blob.flags = CURL_BLOB_COPY;
 			rc = curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &ca_blob);
 			if (rc != CURLE_OK) {
@@ -327,7 +327,7 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 	return 0;
 }
 
-void fw_crc32_init(uint32_t table[256])
+void uboot_crc32_init(uint32_t table[256])
 {
 	const uint32_t poly = 0xEDB88320U;
 
@@ -342,7 +342,7 @@ void fw_crc32_init(uint32_t table[256])
 	}
 }
 
-uint32_t fw_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len)
+uint32_t uboot_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len)
 {
 	uint32_t c = 0xFFFFFFFFU;
 
@@ -355,7 +355,7 @@ uint32_t fw_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len
 	return c ^ 0xFFFFFFFFU;
 }
 
-int fw_get_mtd_index(const char *dev, char *idx, size_t idx_sz)
+int uboot_get_mtd_index(const char *dev, char *idx, size_t idx_sz)
 {
 	const char *base = strrchr(dev, '/');
 	const char *p;
@@ -384,21 +384,21 @@ int fw_get_mtd_index(const char *dev, char *idx, size_t idx_sz)
 	return 0;
 }
 
-uint64_t fw_guess_size_from_sysfs(const char *dev)
+uint64_t uboot_guess_size_from_sysfs(const char *dev)
 {
 	char idx[32], path[256];
 
-	if (fw_get_mtd_index(dev, idx, sizeof(idx)))
+	if (uboot_get_mtd_index(dev, idx, sizeof(idx)))
 		return 0;
 	snprintf(path, sizeof(path), "/sys/class/mtd/mtd%s/size", idx);
 	return read_u64_from_file(path);
 }
 
-uint64_t fw_guess_erasesize_from_sysfs(const char *dev)
+uint64_t uboot_guess_erasesize_from_sysfs(const char *dev)
 {
 	char idx[32], path[256];
 
-	if (fw_get_mtd_index(dev, idx, sizeof(idx)))
+	if (uboot_get_mtd_index(dev, idx, sizeof(idx)))
 		return 0;
 	snprintf(path, sizeof(path), "/sys/class/mtd/mtd%s/erasesize", idx);
 	return read_u64_from_file(path);
@@ -415,7 +415,7 @@ static void make_proc_mtd_name(const char *dev, char *out, size_t out_sz)
 		return;
 	}
 
-	if (fw_get_mtd_index(dev, idx, sizeof(idx))) {
+	if (uboot_get_mtd_index(dev, idx, sizeof(idx))) {
 		*out = '\0';
 		return;
 	}
@@ -429,7 +429,7 @@ static void make_proc_mtd_name(const char *dev, char *out, size_t out_sz)
 	out[3 + idx_len] = '\0';
 }
 
-uint64_t fw_guess_size_from_proc_mtd(const char *dev)
+uint64_t uboot_guess_size_from_proc_mtd(const char *dev)
 {
 	char want[32], line[256];
 	FILE *fp;
@@ -455,7 +455,7 @@ uint64_t fw_guess_size_from_proc_mtd(const char *dev)
 	return 0;
 }
 
-uint64_t fw_guess_erasesize_from_proc_mtd(const char *dev)
+uint64_t uboot_guess_erasesize_from_proc_mtd(const char *dev)
 {
 	char want[32], line[256];
 	FILE *fp;
@@ -503,7 +503,7 @@ static int get_ubi_indices(const char *dev, unsigned int *ubi, unsigned int *vol
 	return 0;
 }
 
-uint64_t fw_guess_size_from_ubi_sysfs(const char *dev)
+uint64_t uboot_guess_size_from_ubi_sysfs(const char *dev)
 {
 	unsigned int ubi, vol;
 	char path[256];
@@ -532,7 +532,7 @@ uint64_t fw_guess_size_from_ubi_sysfs(const char *dev)
 	return reserved_ebs * usable_eb_size;
 }
 
-uint64_t fw_guess_step_from_ubi_sysfs(const char *dev)
+uint64_t uboot_guess_step_from_ubi_sysfs(const char *dev)
 {
 	unsigned int ubi, vol;
 	char path[256];
@@ -561,7 +561,7 @@ static const char *dev_basename(const char *dev)
 	return base ? base + 1 : dev;
 }
 
-uint64_t fw_guess_size_from_block_sysfs(const char *dev)
+uint64_t uboot_guess_size_from_block_sysfs(const char *dev)
 {
 	const char *base = dev_basename(dev);
 	char path[PATH_MAX];
@@ -584,7 +584,7 @@ uint64_t fw_guess_size_from_block_sysfs(const char *dev)
 	return sectors * logical_block_size;
 }
 
-uint64_t fw_guess_step_from_block_sysfs(const char *dev)
+uint64_t uboot_guess_step_from_block_sysfs(const char *dev)
 {
 	const char *base = dev_basename(dev);
 	char path[PATH_MAX];
@@ -606,35 +606,35 @@ uint64_t fw_guess_step_from_block_sysfs(const char *dev)
 	return 512;
 }
 
-uint64_t fw_guess_size_any(const char *dev)
+uint64_t uboot_guess_size_any(const char *dev)
 {
-	uint64_t sz = fw_guess_size_from_sysfs(dev);
+	uint64_t sz = uboot_guess_size_from_sysfs(dev);
 
 	if (!sz)
-		sz = fw_guess_size_from_proc_mtd(dev);
+		sz = uboot_guess_size_from_proc_mtd(dev);
 	if (!sz)
-		sz = fw_guess_size_from_ubi_sysfs(dev);
+		sz = uboot_guess_size_from_ubi_sysfs(dev);
 	if (!sz)
-		sz = fw_guess_size_from_block_sysfs(dev);
+		sz = uboot_guess_size_from_block_sysfs(dev);
 
 	return sz;
 }
 
-uint64_t fw_guess_step_any(const char *dev)
+uint64_t uboot_guess_step_any(const char *dev)
 {
-	uint64_t step = fw_guess_erasesize_from_sysfs(dev);
+	uint64_t step = uboot_guess_erasesize_from_sysfs(dev);
 
 	if (!step)
-		step = fw_guess_erasesize_from_proc_mtd(dev);
+		step = uboot_guess_erasesize_from_proc_mtd(dev);
 	if (!step)
-		step = fw_guess_step_from_ubi_sysfs(dev);
+		step = uboot_guess_step_from_ubi_sysfs(dev);
 	if (!step)
-		step = fw_guess_step_from_block_sysfs(dev);
+		step = uboot_guess_step_from_block_sysfs(dev);
 
 	return step;
 }
 
-int fw_glob_scan_devices(glob_t *out, unsigned int flags)
+int uboot_glob_scan_devices(glob_t *out, unsigned int flags)
 {
 	const char *patterns[8];
 	size_t n = 0;
@@ -701,7 +701,7 @@ static int add_created_node(char ***nodes, size_t *count, const char *path)
 	return 0;
 }
 
-void fw_free_created_nodes(char **nodes, size_t count)
+void uboot_free_created_nodes(char **nodes, size_t count)
 {
 	if (!nodes)
 		return;
@@ -811,7 +811,7 @@ static bool is_emmc_block_name(const char *name)
 	return str_all_digits(p + 1);
 }
 
-int fw_ensure_block_nodes_collect(bool verbose, bool include_sd, bool include_emmc,
+int uboot_ensure_block_nodes_collect(bool verbose, bool include_sd, bool include_emmc,
 				  char ***created_nodes, size_t *created_count)
 {
 	DIR *dir;
@@ -848,12 +848,12 @@ int fw_ensure_block_nodes_collect(bool verbose, bool include_sd, bool include_em
 	return 0;
 }
 
-void fw_ensure_block_nodes(bool verbose, bool include_sd, bool include_emmc)
+void uboot_ensure_block_nodes(bool verbose, bool include_sd, bool include_emmc)
 {
-	fw_ensure_block_nodes_collect(verbose, include_sd, include_emmc, NULL, NULL);
+	uboot_ensure_block_nodes_collect(verbose, include_sd, include_emmc, NULL, NULL);
 }
 
-int fw_ensure_mtd_nodes_collect(bool verbose, char ***created_nodes, size_t *created_count)
+int uboot_ensure_mtd_nodes_collect(bool verbose, char ***created_nodes, size_t *created_count)
 {
 	DIR *dir;
 	struct dirent *de;
@@ -880,12 +880,12 @@ int fw_ensure_mtd_nodes_collect(bool verbose, char ***created_nodes, size_t *cre
 	return 0;
 }
 
-void fw_ensure_mtd_nodes(bool verbose)
+void uboot_ensure_mtd_nodes(bool verbose)
 {
-	fw_ensure_mtd_nodes_collect(verbose, NULL, NULL);
+	uboot_ensure_mtd_nodes_collect(verbose, NULL, NULL);
 }
 
-int fw_ensure_ubi_nodes_collect(bool verbose, char ***created_nodes, size_t *created_count)
+int uboot_ensure_ubi_nodes_collect(bool verbose, char ***created_nodes, size_t *created_count)
 {
 	DIR *dir;
 	struct dirent *de;
@@ -977,7 +977,7 @@ int fw_ensure_ubi_nodes_collect(bool verbose, char ***created_nodes, size_t *cre
 	return 0;
 }
 
-void fw_ensure_ubi_nodes(bool verbose)
+void uboot_ensure_ubi_nodes(bool verbose)
 {
-	fw_ensure_ubi_nodes_collect(verbose, NULL, NULL);
+	uboot_ensure_ubi_nodes_collect(verbose, NULL, NULL);
 }

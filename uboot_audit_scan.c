@@ -17,13 +17,13 @@
 #define O_CLOEXEC 0
 #endif
 
-enum fw_output_format {
+enum uboot_output_format {
 	FW_OUTPUT_TXT = 0,
 	FW_OUTPUT_CSV,
 	FW_OUTPUT_JSON,
 };
 
-static enum fw_output_format detect_output_format(void)
+static enum uboot_output_format detect_output_format(void)
 {
 	const char *fmt = getenv("FW_AUDIT_OUTPUT_FORMAT");
 
@@ -41,7 +41,7 @@ static uint64_t parse_u64(const char *s)
 {
 	uint64_t v;
 
-	if (fw_parse_u64(s, &v)) {
+	if (uboot_parse_u64(s, &v)) {
 		fprintf(stderr, "Invalid number: %s\n", s);
 		exit(2);
 	}
@@ -62,7 +62,7 @@ static void usage(const char *prog)
 		prog);
 }
 
-static bool rule_name_selected(const char *filter, const struct fw_audit_rule *rule)
+static bool rule_name_selected(const char *filter, const struct uboot_audit_rule *rule)
 {
 	if (!rule || !rule->name || !*rule->name)
 		return false;
@@ -73,8 +73,8 @@ static bool rule_name_selected(const char *filter, const struct fw_audit_rule *r
 	return !strcmp(filter, rule->name);
 }
 
-static void print_rule_record(enum fw_output_format fmt,
-			      const struct fw_audit_rule *rule,
+static void print_rule_record(enum uboot_output_format fmt,
+			      const struct uboot_audit_rule *rule,
 			      int rc,
 			      const char *message)
 {
@@ -108,7 +108,7 @@ static void print_rule_record(enum fw_output_format fmt,
 	       message ? message : "");
 }
 
-static void print_rule_listing(enum fw_output_format fmt, const struct fw_audit_rule *rule)
+static void print_rule_listing(enum uboot_output_format fmt, const struct uboot_audit_rule *rule)
 {
 	if (fmt == FW_OUTPUT_CSV) {
 		printf("audit_rule_list,%s,%s\n",
@@ -137,7 +137,7 @@ static void print_rule_listing(enum fw_output_format fmt, const struct fw_audit_
 	printf("\n");
 }
 
-int fw_audit_scan_main(int argc, char **argv)
+int uboot_audit_scan_main(int argc, char **argv)
 {
 	const char *dev = NULL;
 	const char *rule_filter = NULL;
@@ -146,10 +146,10 @@ int fw_audit_scan_main(int argc, char **argv)
 	bool verbose = false;
 	bool list_rules = false;
 	uint32_t crc32_table[256];
-	const struct fw_audit_rule * const *rulep;
-	const struct fw_audit_rule * const *start = __start_fw_audit_rules;
-	const struct fw_audit_rule * const *stop = __stop_fw_audit_rules;
-	enum fw_output_format fmt;
+	const struct uboot_audit_rule * const *rulep;
+	const struct uboot_audit_rule * const *start = __start_uboot_audit_rules;
+	const struct uboot_audit_rule * const *stop = __stop_uboot_audit_rules;
+	enum uboot_output_format fmt;
 	int opt;
 	int ret = 0;
 	int fd = -1;
@@ -206,7 +206,7 @@ int fw_audit_scan_main(int argc, char **argv)
 			printf("record,rule,description\n");
 
 		for (rulep = start; rulep < stop; rulep++) {
-			const struct fw_audit_rule *rule = *rulep;
+			const struct uboot_audit_rule *rule = *rulep;
 
 			if (!rule->name || !rule->run)
 				continue;
@@ -247,16 +247,16 @@ int fw_audit_scan_main(int argc, char **argv)
 		goto out;
 	}
 
-	fw_crc32_init(crc32_table);
+	uboot_crc32_init(crc32_table);
 
 	if (fmt == FW_OUTPUT_CSV)
 		printf("record,rule,status,message\n");
 
 	for (rulep = start; rulep < stop; rulep++) {
-		const struct fw_audit_rule *rule = *rulep;
+		const struct uboot_audit_rule *rule = *rulep;
 		char message[512] = {0};
 		int rc;
-		struct fw_audit_input input;
+		struct uboot_audit_input input;
 
 		if (!rule_name_selected(rule_filter, rule))
 			continue;

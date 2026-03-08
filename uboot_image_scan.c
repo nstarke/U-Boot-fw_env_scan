@@ -42,12 +42,12 @@ static const char *g_output_http_uri = NULL;
 static char *g_output_http_buf = NULL;
 static size_t g_output_http_len;
 static size_t g_output_http_cap;
-enum fw_output_format {
+enum uboot_output_format {
 	FW_OUTPUT_TXT = 0,
 	FW_OUTPUT_CSV,
 	FW_OUTPUT_JSON,
 };
-static enum fw_output_format g_output_format = FW_OUTPUT_TXT;
+static enum uboot_output_format g_output_format = FW_OUTPUT_TXT;
 static bool g_csv_header_emitted;
 
 static const char *image_http_content_type(void)
@@ -82,7 +82,7 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 
 	if ((size_t)needed < sizeof(stack)) {
 		if (g_log_sock >= 0)
-			fw_send_all(g_log_sock, (const uint8_t *)stack, (size_t)needed);
+			uboot_send_all(g_log_sock, (const uint8_t *)stack, (size_t)needed);
 		if (g_output_http_uri) {
 			size_t need = g_output_http_len + (size_t)needed + 1;
 			if (need > g_output_http_cap) {
@@ -115,7 +115,7 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
 	va_end(aq);
 	if (g_log_sock >= 0)
-		fw_send_all(g_log_sock, (const uint8_t *)dyn, (size_t)needed);
+		uboot_send_all(g_log_sock, (const uint8_t *)dyn, (size_t)needed);
 	if (g_output_http_uri) {
 		size_t need = g_output_http_len + (size_t)needed + 1;
 		if (need > g_output_http_cap) {
@@ -284,14 +284,14 @@ static bool str_contains_token_ci(const char *haystack, const char *needle)
 
 static bool validate_fit_header(const uint8_t *p, uint64_t abs_off, uint64_t dev_size)
 {
-	uint32_t totalsize = fw_read_be32(p + 4);
-	uint32_t off_dt_struct = fw_read_be32(p + 8);
-	uint32_t off_dt_strings = fw_read_be32(p + 12);
-	uint32_t off_mem_rsvmap = fw_read_be32(p + 16);
-	uint32_t version = fw_read_be32(p + 20);
-	uint32_t last_comp_version = fw_read_be32(p + 24);
-	uint32_t size_dt_strings = fw_read_be32(p + 32);
-	uint32_t size_dt_struct = fw_read_be32(p + 36);
+	uint32_t totalsize = uboot_read_be32(p + 4);
+	uint32_t off_dt_struct = uboot_read_be32(p + 8);
+	uint32_t off_dt_strings = uboot_read_be32(p + 12);
+	uint32_t off_mem_rsvmap = uboot_read_be32(p + 16);
+	uint32_t version = uboot_read_be32(p + 20);
+	uint32_t last_comp_version = uboot_read_be32(p + 24);
+	uint32_t size_dt_strings = uboot_read_be32(p + 32);
+	uint32_t size_dt_struct = uboot_read_be32(p + 36);
 
 	if (totalsize < FIT_MIN_TOTAL_SIZE || totalsize > FIT_MAX_TOTAL_SIZE)
 		return false;
@@ -325,13 +325,13 @@ static bool validate_uimage_header(const uint8_t *p, uint64_t abs_off, uint64_t 
 	uint32_t data_size;
 
 	memcpy(hdr, p, sizeof(hdr));
-	header_crc = fw_read_be32(hdr + 4);
+	header_crc = uboot_read_be32(hdr + 4);
 	hdr[4] = hdr[5] = hdr[6] = hdr[7] = 0;
 	calc_crc = crc32_calc(hdr, sizeof(hdr));
 	if (calc_crc != header_crc)
 		return false;
 
-	data_size = fw_read_be32(p + 12);
+	data_size = uboot_read_be32(p + 12);
 	if (data_size == 0 || data_size > UIMAGE_MAX_DATA_SIZE)
 		return false;
 	if (abs_off + UIMAGE_HDR_SIZE + data_size > dev_size)
@@ -382,11 +382,11 @@ static bool fit_find_load_address(const uint8_t *blob,
 	if (!blob || blob_size < 40 || !addr_out)
 		return false;
 
-	total_size = fw_read_be32(blob + 4);
-	off_dt_struct = fw_read_be32(blob + 8);
-	off_dt_strings = fw_read_be32(blob + 12);
-	size_dt_strings = fw_read_be32(blob + 32);
-	size_dt_struct = fw_read_be32(blob + 36);
+	total_size = uboot_read_be32(blob + 4);
+	off_dt_struct = uboot_read_be32(blob + 8);
+	off_dt_strings = uboot_read_be32(blob + 12);
+	size_dt_strings = uboot_read_be32(blob + 32);
+	size_dt_struct = uboot_read_be32(blob + 36);
 
 	if ((uint64_t)off_dt_struct + size_dt_struct > blob_size)
 		return false;
@@ -398,7 +398,7 @@ static bool fit_find_load_address(const uint8_t *blob,
 	strings = (const char *)blob + off_dt_strings;
 
 	while (p + 4 <= end) {
-		uint32_t token = fw_read_be32(p);
+		uint32_t token = uboot_read_be32(p);
 		p += 4;
 
 		switch (token) {
@@ -461,8 +461,8 @@ static bool fit_find_load_address(const uint8_t *blob,
 
 			if (p + 8 > end)
 				return false;
-			len = fw_read_be32(p);
-			nameoff = fw_read_be32(p + 4);
+			len = uboot_read_be32(p);
+			nameoff = uboot_read_be32(p + 4);
 			p += 8;
 			if (nameoff >= size_dt_strings)
 				return false;
@@ -472,9 +472,9 @@ static bool fit_find_load_address(const uint8_t *blob,
 			name = strings + nameoff;
 			data = p;
 			if (!strcmp(name, "load") && len >= 4 && !load_found) {
-				load_value = fw_read_be32(data);
+				load_value = uboot_read_be32(data);
 				if (len >= 8 && load_value == 0)
-					load_value = fw_read_be32(data + 4);
+					load_value = uboot_read_be32(data + 4);
 				load_found = true;
 			}
 
@@ -491,17 +491,17 @@ static bool fit_find_load_address(const uint8_t *blob,
 				}
 
 				if (!strcmp(name, "data-position") && len >= 4) {
-					uint64_t pos = fw_read_be32(data);
+					uint64_t pos = uboot_read_be32(data);
 					if (len >= 8 && pos == 0)
-						pos = fw_read_be32(data + 4);
+						pos = uboot_read_be32(data + 4);
 					image_payload_off_found = true;
 					image_payload_off = pos;
 				}
 
 				if (!strcmp(name, "data-offset") && len >= 4) {
-					uint64_t ext_off = fw_read_be32(data);
+					uint64_t ext_off = uboot_read_be32(data);
 					if (len >= 8 && ext_off == 0)
-						ext_off = fw_read_be32(data + 4);
+						ext_off = uboot_read_be32(data + 4);
 					image_payload_off_found = true;
 					image_payload_off = (uint64_t)total_size + ext_off;
 				}
@@ -529,7 +529,7 @@ static uint64_t parse_u64(const char *s)
 {
 	uint64_t v;
 
-	if (fw_parse_u64(s, &v)) {
+	if (uboot_parse_u64(s, &v)) {
 		fprintf(stderr, "Invalid number: %s\n", s);
 		exit(2);
 	}
@@ -569,7 +569,7 @@ static void usage(const char *prog)
 static int find_image_load_address(const char *dev, uint64_t offset)
 {
 	uint8_t hdr[UIMAGE_HDR_SIZE];
-	uint64_t dev_size = fw_guess_size_any(dev);
+	uint64_t dev_size = uboot_guess_size_any(dev);
 	int fd;
 
 	fd = open(dev, O_RDONLY | O_CLOEXEC);
@@ -591,10 +591,10 @@ static int find_image_load_address(const char *dev, uint64_t offset)
 			return 1;
 		}
 		if (g_output_format == FW_OUTPUT_TXT) {
-			out_printf("uImage load address: 0x%08x\n", fw_read_be32(hdr + 16));
+			out_printf("uImage load address: 0x%08x\n", uboot_read_be32(hdr + 16));
 		} else {
 			char value[32];
-			snprintf(value, sizeof(value), "0x%08x", fw_read_be32(hdr + 16));
+			snprintf(value, sizeof(value), "0x%08x", uboot_read_be32(hdr + 16));
 			emit_image_record("image_load_address", dev, offset, "uImage", value);
 		}
 		close(fd);
@@ -614,7 +614,7 @@ static int find_image_load_address(const char *dev, uint64_t offset)
 			return 1;
 		}
 
-		total_size = fw_read_be32(hdr + 4);
+		total_size = uboot_read_be32(hdr + 4);
 		fit_blob = malloc((size_t)total_size);
 		if (!fit_blob) {
 			err_printf("Unable to allocate memory to inspect FIT image\n");
@@ -670,7 +670,7 @@ static int find_image_load_address(const char *dev, uint64_t offset)
 static int pull_image_to_output_tcp(const char *dev, uint64_t offset, const char *output_tcp_target)
 {
 	uint8_t hdr[UIMAGE_HDR_SIZE];
-	uint64_t dev_size = fw_guess_size_any(dev);
+	uint64_t dev_size = uboot_guess_size_any(dev);
 	uint64_t total_size = 0;
 	int fd, sock;
 
@@ -692,21 +692,21 @@ static int pull_image_to_output_tcp(const char *dev, uint64_t offset, const char
 			close(fd);
 			return 1;
 		}
-		total_size = UIMAGE_HDR_SIZE + fw_read_be32(hdr + 12);
+		total_size = UIMAGE_HDR_SIZE + uboot_read_be32(hdr + 12);
 	} else if (!memcmp(hdr, "\xD0\x0D\xFE\xED", 4)) {
 		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
 			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
 			close(fd);
 			return 1;
 		}
-		total_size = fw_read_be32(hdr + 4);
+		total_size = uboot_read_be32(hdr + 4);
 	} else {
 		err_printf("Unknown image format at offset 0x%jx\n", (uintmax_t)offset);
 		close(fd);
 		return 1;
 	}
 
-	sock = fw_connect_tcp_ipv4(output_tcp_target);
+	sock = uboot_connect_tcp_ipv4(output_tcp_target);
 	if (sock < 0) {
 		err_printf("Unable to connect to output target %s\n", output_tcp_target);
 		close(fd);
@@ -719,7 +719,7 @@ static int pull_image_to_output_tcp(const char *dev, uint64_t offset, const char
 		while (sent < total_size) {
 			size_t want = (size_t)((total_size - sent) > sizeof(buf) ? sizeof(buf) : (total_size - sent));
 			ssize_t n = pread(fd, buf, want, (off_t)(offset + sent));
-			if (n <= 0 || fw_send_all(sock, buf, (size_t)n) < 0) {
+			if (n <= 0 || uboot_send_all(sock, buf, (size_t)n) < 0) {
 				err_printf("Pull failed while sending image bytes\n");
 				close(sock);
 				close(fd);
@@ -743,7 +743,7 @@ static int pull_image_to_output_tcp(const char *dev, uint64_t offset, const char
 static int pull_image_to_output_http(const char *dev, uint64_t offset, const char *output_http_uri)
 {
 	uint8_t hdr[UIMAGE_HDR_SIZE];
-	uint64_t dev_size = fw_guess_size_any(dev);
+	uint64_t dev_size = uboot_guess_size_any(dev);
 	uint64_t total_size = 0;
 	uint8_t *img = NULL;
 	int fd;
@@ -767,14 +767,14 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 			close(fd);
 			return 1;
 		}
-		total_size = UIMAGE_HDR_SIZE + fw_read_be32(hdr + 12);
+		total_size = UIMAGE_HDR_SIZE + uboot_read_be32(hdr + 12);
 	} else if (!memcmp(hdr, "\xD0\x0D\xFE\xED", 4)) {
 		if (!validate_fit_header(hdr, offset, dev_size ? dev_size : UINT64_MAX)) {
 			err_printf("FIT header validation failed at offset 0x%jx\n", (uintmax_t)offset);
 			close(fd);
 			return 1;
 		}
-		total_size = fw_read_be32(hdr + 4);
+		total_size = uboot_read_be32(hdr + 4);
 	} else {
 		err_printf("Unknown image format at offset 0x%jx\n", (uintmax_t)offset);
 		close(fd);
@@ -795,7 +795,7 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 		return 1;
 	}
 
-	if (fw_http_post(output_http_uri, img, (size_t)total_size,
+	if (uboot_http_post(output_http_uri, img, (size_t)total_size,
 			 "application/octet-stream", g_insecure,
 			 errbuf, sizeof(errbuf)) < 0) {
 		err_printf("Failed HTTP POST to %s: %s\n", output_http_uri, errbuf[0] ? errbuf : "unknown error");
@@ -855,7 +855,7 @@ static int scan_dev_for_image(const char *dev, uint64_t step)
 	if (fstat(fd, &st) == 0)
 		size = (uint64_t)st.st_size;
 	if (!size)
-		size = fw_guess_size_any(dev);
+		size = uboot_guess_size_any(dev);
 
 	if (!size) {
 		close(fd);
@@ -911,7 +911,7 @@ static int scan_dev_for_image(const char *dev, uint64_t step)
 	return hits;
 }
 
-int fw_image_scan_main(int argc, char **argv)
+int uboot_image_scan_main(int argc, char **argv)
 {
 	const char *dev_override = NULL;
 	const char *output_tcp_target = NULL;
@@ -1076,7 +1076,7 @@ int fw_image_scan_main(int argc, char **argv)
 	}
 
 	if (g_send_logs) {
-		g_log_sock = fw_connect_tcp_ipv4(output_tcp_target);
+		g_log_sock = uboot_connect_tcp_ipv4(output_tcp_target);
 		if (g_log_sock < 0) {
 			err_printf("Unable to connect to log output target %s\n", output_tcp_target);
 			return 2;
@@ -1114,10 +1114,10 @@ int fw_image_scan_main(int argc, char **argv)
 	}
 
 	if (!skip_mtd)
-		fw_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
+		uboot_ensure_mtd_nodes_collect(helper_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
 	if (!skip_ubi)
-		fw_ensure_ubi_nodes_collect(helper_verbose, &created_ubi_nodes, &created_ubi_count);
-	fw_ensure_block_nodes_collect(helper_verbose, !skip_sd, !skip_emmc,
+		uboot_ensure_ubi_nodes_collect(helper_verbose, &created_ubi_nodes, &created_ubi_count);
+	uboot_ensure_block_nodes_collect(helper_verbose, !skip_sd, !skip_emmc,
 		&created_block_nodes, &created_block_count);
 
 	if (dev_override) {
@@ -1140,7 +1140,7 @@ int fw_image_scan_main(int argc, char **argv)
 	if (!skip_sd)
 		scan_flags |= FW_SCAN_GLOB_SDBLK;
 
-	if (fw_glob_scan_devices(&g, scan_flags) < 0) {
+	if (uboot_glob_scan_devices(&g, scan_flags) < 0) {
 		total_hits = -1;
 		goto out;
 	}
@@ -1179,16 +1179,16 @@ out:
 		}
 	}
 
-	fw_free_created_nodes(created_mtdblock_nodes, created_mtdblock_count);
-	fw_free_created_nodes(created_ubi_nodes, created_ubi_count);
-	fw_free_created_nodes(created_block_nodes, created_block_count);
+	uboot_free_created_nodes(created_mtdblock_nodes, created_mtdblock_count);
+	uboot_free_created_nodes(created_ubi_nodes, created_ubi_count);
+	uboot_free_created_nodes(created_block_nodes, created_block_count);
 
 	if (g_log_sock >= 0)
 		close(g_log_sock);
 
 	if (g_output_http_uri) {
 		char errbuf[256];
-		if (fw_http_post(g_output_http_uri,
+		if (uboot_http_post(g_output_http_uri,
 				 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 				 g_output_http_len,
 				 image_http_content_type(),
