@@ -356,7 +356,43 @@ uint64_t fw_guess_step_from_ubi_sysfs(const char *dev)
 	return read_u64_from_file(path);
 }
 
-static void create_node_if_missing(const char *path, mode_t mode, dev_t devno, bool verbose)
+static int add_created_node(char ***nodes, size_t *count, const char *path)
+{
+	char **tmp;
+	char *dup;
+
+	if (!nodes || !count || !path)
+		return -1;
+
+	dup = strdup(path);
+	if (!dup)
+		return -1;
+
+	tmp = realloc(*nodes, (*count + 1) * sizeof(*tmp));
+	if (!tmp) {
+		free(dup);
+		return -1;
+	}
+
+	*nodes = tmp;
+	(*nodes)[*count] = dup;
+	(*count)++;
+	return 0;
+}
+
+void fw_free_created_nodes(char **nodes, size_t count)
+{
+	if (!nodes)
+		return;
+
+	for (size_t i = 0; i < count; i++)
+		free(nodes[i]);
+
+	free(nodes);
+}
+
+static void create_node_if_missing(const char *path, mode_t mode, dev_t devno, bool verbose,
+					   char ***created_nodes, size_t *created_count)
 {
 	struct stat st;
 
@@ -369,6 +405,11 @@ static void create_node_if_missing(const char *path, mode_t mode, dev_t devno, b
 		if (verbose)
 			fprintf(stderr, "Warning: cannot create %s: %s\n", path, strerror(errno));
 		return;
+	}
+
+	if (created_nodes && created_count && add_created_node(created_nodes, created_count, path) < 0) {
+		if (verbose)
+			fprintf(stderr, "Warning: failed to track created node %s\n", path);
 	}
 
 	if (verbose)
@@ -404,14 +445,14 @@ static int read_major_minor_from_sysfs(const char *dev_attr_path,
 	return 0;
 }
 
-void fw_ensure_mtd_nodes(bool verbose)
+int fw_ensure_mtd_nodes_collect(bool verbose, char ***created_nodes, size_t *created_count)
 {
 	DIR *dir;
 	struct dirent *de;
 
 	dir = opendir("/sys/class/mtd");
 	if (!dir)
-		return;
+		return -1;
 
 	while ((de = readdir(dir))) {
 		unsigned int idx;
@@ -423,10 +464,17 @@ void fw_ensure_mtd_nodes(bool verbose)
 
 		snprintf(blockpath, sizeof(blockpath), "/dev/mtdblock%u", idx);
 
-		create_node_if_missing(blockpath, S_IFBLK | 0600, makedev(31, idx), verbose);
+		create_node_if_missing(blockpath, S_IFBLK | 0600, makedev(31, idx), verbose,
+			created_nodes, created_count);
 	}
 
 	closedir(dir);
+	return 0;
+}
+
+void fw_ensure_mtd_nodes(bool verbose)
+{
+	fw_ensure_mtd_nodes_collect(verbose, NULL, NULL);
 }
 
 void fw_ensure_ubi_nodes(bool verbose)
@@ -472,7 +520,8 @@ void fw_ensure_ubi_nodes(bool verbose)
 			if (read_major_minor_from_sysfs(dev_attr, &major, &minor))
 				continue;
 
-			create_node_if_missing(devnode, S_IFCHR | 0600, makedev(major, minor), verbose);
+			create_node_if_missing(devnode, S_IFCHR | 0600, makedev(major, minor), verbose,
+				NULL, NULL);
 		}
 
 		closedir(dir);
@@ -512,7 +561,8 @@ void fw_ensure_ubi_nodes(bool verbose)
 		if (read_major_minor_from_sysfs(dev_attr, &major, &minor))
 			continue;
 
-		create_node_if_missing(devnode, S_IFBLK | 0600, makedev(major, minor), verbose);
+		create_node_if_missing(devnode, S_IFBLK | 0600, makedev(major, minor), verbose,
+			NULL, NULL);
 	}
 
 	closedir(dir);

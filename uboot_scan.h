@@ -15,6 +15,8 @@ uint64_t fw_guess_size_from_ubi_sysfs(const char *dev);
 uint64_t fw_guess_step_from_ubi_sysfs(const char *dev);
 
 void fw_ensure_mtd_nodes(bool verbose);
+int fw_ensure_mtd_nodes_collect(bool verbose, char ***created_nodes, size_t *created_count);
+void fw_free_created_nodes(char **nodes, size_t count);
 void fw_ensure_ubi_nodes(bool verbose);
 
 int fw_parse_u64(const char *s, uint64_t *out);

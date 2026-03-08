@@ -224,7 +224,7 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 
 static void usage(const char *prog)
 {
-	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [<dev:step> ...]\n"
+	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [--skip-remove] [<dev:step> ...]\n"
 		"             [--output <ip:port>]\n", prog);
 }
 
@@ -236,6 +236,10 @@ int fw_env_scan_main(int argc, char **argv)
 	const char *hint_override = NULL;
 	const char *dev_override = NULL;
 	const char *output_target = NULL;
+	bool skip_remove = false;
+	char **created_mtdblock_nodes = NULL;
+	size_t created_mtdblock_count = 0;
+	int ret = 0;
 	int argi;
 	int opt;
 
@@ -254,11 +258,12 @@ int fw_env_scan_main(int argc, char **argv)
 		{ "dev", required_argument, NULL, 'd' },
 		{ "brutefoce", no_argument, NULL, 'b' },
 		{ "bruteforce", no_argument, NULL, 'b' },
+		{ "skip-remove", no_argument, NULL, 'R' },
 		{ "output", required_argument, NULL, 'o' },
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:R", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h': usage(argv[0]); return 0;
 		case 'v': g_verbose = true; break;
@@ -266,6 +271,7 @@ int fw_env_scan_main(int argc, char **argv)
 		case 'H': hint_override = optarg; break;
 		case 'd': dev_override = optarg; break;
 		case 'b': g_bruteforce = true; break;
+		case 'R': skip_remove = true; break;
 		case 'o': output_target = optarg; break;
 		default: usage(argv[0]); return 2;
 		}
@@ -274,25 +280,28 @@ int fw_env_scan_main(int argc, char **argv)
 	argi = optind;
 	if (geteuid() != 0) {
 		err_printf("This program must be run as root.\n");
-		return 1;
+		ret = 1;
+		goto out;
 	}
 
 	if (output_target && *output_target) {
 		g_output_sock = fw_connect_tcp_ipv4(output_target);
 		if (g_output_sock < 0) {
 			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_target);
-			return 2;
+			ret = 2;
+			goto out;
 		}
 	}
 
 	fw_crc32_init(crc32_table);
-	fw_ensure_mtd_nodes(g_verbose);
+	fw_ensure_mtd_nodes_collect(g_verbose, &created_mtdblock_nodes, &created_mtdblock_count);
 	fw_ensure_ubi_nodes(g_verbose);
 
 	if (dev_override) {
 		if (!strncmp(dev_override, "/dev/mtd", 8) && strncmp(dev_override, "/dev/mtdblock", 13)) {
 			err_printf("Refusing to scan raw MTD char device: %s (use /dev/mtdblock* instead)\n", dev_override);
-			return 2;
+			ret = 2;
+			goto out;
 		}
 
 		uint64_t step = fw_guess_erasesize_from_sysfs(dev_override);
@@ -301,17 +310,22 @@ int fw_env_scan_main(int argc, char **argv)
 		if (!step)
 			step = fw_guess_step_from_ubi_sysfs(dev_override);
 		if (!step)
-			return 1;
+			goto scan_fail;
 		if (step > AUTO_SCAN_MAX_STEP)
 			step = AUTO_SCAN_MAX_STEP;
 
 		if (fixed_size)
-			return (scan_dev(dev_override, step, env_size, hint_override) < 0) ? 1 : 0;
+			goto one_scan_done;
 
 		for (size_t i = 0; i < ARRAY_SIZE(common_sizes); i++)
 			if (scan_dev(dev_override, step, common_sizes[i], hint_override) < 0)
-				return 1;
-		return 0;
+				goto scan_fail;
+		ret = 0;
+		goto out;
+
+one_scan_done:
+		ret = (scan_dev(dev_override, step, env_size, hint_override) < 0) ? 1 : 0;
+		goto out;
 	}
 
 	if (argi >= argc) {
@@ -333,15 +347,16 @@ int fw_env_scan_main(int argc, char **argv)
 
 			if (fixed_size) {
 				if (scan_dev(dev, step, env_size, hint_override) < 0)
-					return 1;
+					goto scan_fail;
 			} else {
 				for (size_t i = 0; i < ARRAY_SIZE(common_sizes); i++)
 					if (scan_dev(dev, step, common_sizes[i], hint_override) < 0)
-						return 1;
+						goto scan_fail;
 			}
 		}
 		globfree(&g);
-		return 0;
+		ret = 0;
+		goto out;
 	}
 
 	for (int i = argi; i < argc; i++) {
@@ -358,16 +373,30 @@ int fw_env_scan_main(int argc, char **argv)
 		uint64_t step = parse_u64(colon + 1);
 		if (fixed_size) {
 			if (scan_dev(arg, step, env_size, hint_override) < 0)
-				return 1;
+				goto scan_fail;
 		} else {
 			for (size_t si = 0; si < ARRAY_SIZE(common_sizes); si++)
 				if (scan_dev(arg, step, common_sizes[si], hint_override) < 0)
-					return 1;
+					goto scan_fail;
 		}
 		*colon = ':';
 	}
+	ret = 0;
+	goto out;
 
+scan_fail:
+	ret = 1;
+
+out:
+	if (!skip_remove) {
+		for (size_t i = 0; i < created_mtdblock_count; i++) {
+			if (unlink(created_mtdblock_nodes[i]) < 0 && errno != ENOENT)
+				err_printf("Warning: failed to remove created node %s: %s\n",
+					created_mtdblock_nodes[i], strerror(errno));
+		}
+	}
+	fw_free_created_nodes(created_mtdblock_nodes, created_mtdblock_count);
 	if (g_output_sock >= 0)
 		close(g_output_sock);
-	return 0;
+	return ret;
 }
