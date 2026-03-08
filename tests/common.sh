@@ -6,67 +6,68 @@ PASS_COUNT=0
 FAIL_COUNT=0
 
 run_with_output_override() {
-    local args=("$@")
-    local override_flag=""
-    local override_value=""
+    override_flag=""
+    override_value=""
 
-    if [[ -n "${TEST_OUTPUT_HTTP:-}" && -n "${TEST_OUTPUT_HTTPS:-}" ]]; then
+    if [ -n "${TEST_OUTPUT_HTTP:-}" ] && [ -n "${TEST_OUTPUT_HTTPS:-}" ]; then
         echo "error: set only one of TEST_OUTPUT_HTTP or TEST_OUTPUT_HTTPS"
         return 2
     fi
 
-    if [[ -n "${TEST_OUTPUT_HTTP:-}" ]]; then
+    if [ -n "${TEST_OUTPUT_HTTP:-}" ]; then
         override_flag="--output-http"
         override_value="$TEST_OUTPUT_HTTP"
-    elif [[ -n "${TEST_OUTPUT_HTTPS:-}" ]]; then
+    elif [ -n "${TEST_OUTPUT_HTTPS:-}" ]; then
         override_flag="--output-https"
         override_value="$TEST_OUTPUT_HTTPS"
     fi
 
-    if [[ -z "$override_flag" ]]; then
-        "${args[@]}"
+    if [ -z "$override_flag" ]; then
+        "$@"
         return $?
     fi
 
-    local rewritten=()
-    local replaced=0
-    local i=0
-    while [[ $i -lt ${#args[@]} ]]; do
-        local arg="${args[$i]}"
-        case "$arg" in
-            --output-http|--output-https)
-                rewritten+=("$override_flag" "$override_value")
-                replaced=1
-                i=$((i + 2))
-                continue
-                ;;
-            --output-http=*|--output-https=*)
-                rewritten+=("${override_flag}=${override_value}")
-                replaced=1
-                i=$((i + 1))
-                continue
-                ;;
-        esac
-
-        rewritten+=("$arg")
-        i=$((i + 1))
+    original_args_file="$(mktemp /tmp/test_args.XXXXXX)"
+    for arg in "$@"; do
+        printf '%s\n' "$arg" >>"$original_args_file"
     done
 
-    if [[ $replaced -eq 0 ]]; then
-        rewritten+=("$override_flag" "$override_value")
+    replaced=0
+    set --
+    while IFS= read -r arg; do
+        case "$arg" in
+            --output-http|--output-https)
+                IFS= read -r _unused_next_arg || true
+                set -- "$@" "$override_flag" "$override_value"
+                replaced=1
+                ;;
+            --output-http=*|--output-https=*)
+                set -- "$@" "${override_flag}=${override_value}"
+                replaced=1
+                ;;
+            *)
+                set -- "$@" "$arg"
+                ;;
+        esac
+    done <"$original_args_file"
+
+    rm -f "$original_args_file"
+
+    if [ "$replaced" -eq 0 ]; then
+        set -- "$@" "$override_flag" "$override_value"
     fi
 
-    "${rewritten[@]}"
+    "$@"
 }
 
 print_section() {
-    local title="$1"
+    title="$1"
     printf '\n==== %s ====\n' "$title"
 }
 
 require_binary() {
-    local bin="$1"
-    if [[ ! -x "$bin" ]]; then
+    bin="$1"
+    if [ ! -x "$bin" ]; then
         echo "error: missing executable: $bin"
         echo "hint: build first with: make"
         exit 1
@@ -74,16 +75,15 @@ require_binary() {
 }
 
 run_exact_case() {
-    local name="$1"
-    local expected_rc="$2"
+    name="$1"
+    expected_rc="$2"
     shift 2
 
-    local log
     log="$(mktemp)"
     run_with_output_override "$@" >"$log" 2>&1
-    local rc=$?
+    rc=$?
 
-    if [[ $rc -eq $expected_rc ]]; then
+    if [ "$rc" -eq "$expected_rc" ]; then
         echo "[PASS] $name (rc=$rc)"
         PASS_COUNT=$((PASS_COUNT + 1))
     else
@@ -96,15 +96,14 @@ run_exact_case() {
 }
 
 run_accept_case() {
-    local name="$1"
+    name="$1"
     shift
 
-    local log
     log="$(mktemp)"
     run_with_output_override "$@" >"$log" 2>&1
-    local rc=$?
+    rc=$?
 
-    if [[ $rc -ne 2 ]]; then
+    if [ "$rc" -ne 2 ]; then
         echo "[PASS] $name (rc=$rc)"
         PASS_COUNT=$((PASS_COUNT + 1))
     else
@@ -120,5 +119,5 @@ finish_tests() {
     echo
     echo "Passed: $PASS_COUNT"
     echo "Failed: $FAIL_COUNT"
-    [[ $FAIL_COUNT -eq 0 ]]
+    [ "$FAIL_COUNT" -eq 0 ]
 }

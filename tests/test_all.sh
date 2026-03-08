@@ -60,7 +60,7 @@ for test_script in \
 do
     echo
     echo "===== Running $(basename "$test_script") ====="
-    if ! bash "$test_script"; then
+    if ! /bin/sh "$test_script"; then
         rc=1
     fi
 done

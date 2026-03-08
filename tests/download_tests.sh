@@ -9,6 +9,12 @@ WEB_SERVER=""
 OUTPUT_DIRECTORY=""
 TEMP_OUTPUT_DIRECTORY=""
 
+# Remove stale temporary download directories from previous runs.
+for stale_dir in /tmp/download_tests_output.*; do
+    [ -d "$stale_dir" ] || continue
+    rm -rf -- "$stale_dir"
+done
+
 usage() {
     echo "usage: $0 --webserver <url> [--output-directory <path>]"
     echo "   or: $0 --webserver=<url> [--output-directory=<path>]"
