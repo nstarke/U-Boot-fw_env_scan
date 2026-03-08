@@ -152,6 +152,7 @@ while IFS= read -r rel_path; do
     echo "downloading $url -> $dest"
 
     fetch_to_file "$url" "$dest"
+    chmod +x "$dest"
 done <"$SCRIPT_LIST_FILE"
 
 AUDIT_BINARY_NAME="uboot_audit-$ISA"
