@@ -35,6 +35,7 @@
 static bool g_verbose;
 static bool g_allow_text;
 static bool g_send_logs;
+static bool g_insecure;
 static uint32_t g_crc32_table[256];
 static int g_log_sock = -1;
 static const char *g_output_http_uri = NULL;
@@ -541,6 +542,7 @@ static void usage(const char *prog)
 		"Usage: %s [--verbose] [--dev <device>] [--step <bytes>] [--allow-text]\n"
 		"       %s --pull --dev <device> --offset <bytes> --output-tcp <IPv4:port>\n"
 		"       %s --pull --dev <device> --offset <bytes> --output-http <http://host:port/>\n"
+		"       %s --pull --dev <device> --offset <bytes> --output-https <https://host:port/>\n"
 		"       %s --find-address --dev <device> --offset <bytes>\n"
 		"       %s [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc]\n"
 		"  no args: scan /dev/mtdblock*, /dev/mtd*, /dev/ubi*_*, /dev/ubiblock*_*, /dev/mmcblk* and /dev/sd* for U-Boot image signatures\n"
@@ -558,8 +560,10 @@ static void usage(const char *prog)
 		"  --find-address: print image load address from header/FIT data\n"
 		"  --offset: byte offset of image header for --pull\n"
 		"  --output-tcp: IPv4:TCPPort destination for --pull\n"
-		"  --output-http: HTTP URI destination for POST output\n",
-		prog, prog, prog, prog, prog);
+		"  --output-http: HTTP URI destination for POST output\n"
+		"  --output-https: HTTPS URI destination for POST output\n"
+		"  --insecure: disable TLS certificate/hostname verification for HTTPS output\n",
+		prog, prog, prog, prog, prog, prog);
 }
 
 static int find_image_load_address(const char *dev, uint64_t offset)
@@ -792,7 +796,8 @@ static int pull_image_to_output_http(const char *dev, uint64_t offset, const cha
 	}
 
 	if (fw_http_post(output_http_uri, img, (size_t)total_size,
-			 "application/octet-stream", errbuf, sizeof(errbuf)) < 0) {
+			 "application/octet-stream", g_insecure,
+			 errbuf, sizeof(errbuf)) < 0) {
 		err_printf("Failed HTTP POST to %s: %s\n", output_http_uri, errbuf[0] ? errbuf : "unknown error");
 		free(img);
 		close(fd);
@@ -911,6 +916,7 @@ int fw_image_scan_main(int argc, char **argv)
 	const char *dev_override = NULL;
 	const char *output_tcp_target = NULL;
 	const char *output_http_target = NULL;
+	const char *output_https_target = NULL;
 	uint64_t step = 0x1000;
 	uint64_t pull_offset = 0;
 	bool pull_mode = false;
@@ -936,6 +942,7 @@ int fw_image_scan_main(int argc, char **argv)
 	g_verbose = false;
 	g_allow_text = false;
 	g_send_logs = false;
+	g_insecure = false;
 	g_csv_header_emitted = false;
 	if (g_log_sock >= 0) {
 		close(g_log_sock);
@@ -949,6 +956,8 @@ int fw_image_scan_main(int argc, char **argv)
 		{ "offset", required_argument, NULL, 'o' },
 		{ "output-tcp", required_argument, NULL, 'p' },
 		{ "output-http", required_argument, NULL, 'O' },
+		{ "output-https", required_argument, NULL, 'T' },
+		{ "insecure", no_argument, NULL, 'k' },
 		{ "pull", no_argument, NULL, 'P' },
 		{ "find-address", no_argument, NULL, 'a' },
 		{ "send-logs", no_argument, NULL, 'L' },
@@ -962,7 +971,7 @@ int fw_image_scan_main(int argc, char **argv)
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvd:s:o:p:O:PtaLRMUSE", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvd:s:o:p:O:T:kPtaLRMUSE", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
@@ -987,6 +996,12 @@ int fw_image_scan_main(int argc, char **argv)
 			break;
 		case 'O':
 			output_http_target = optarg;
+			break;
+		case 'T':
+			output_https_target = optarg;
+			break;
+		case 'k':
+			g_insecure = true;
 			break;
 		case 'P':
 			pull_mode = true;
@@ -1040,8 +1055,20 @@ int fw_image_scan_main(int argc, char **argv)
 		return 2;
 	}
 
+	if (output_https_target && strncmp(output_https_target, "https://", 8)) {
+		err_printf("Invalid --output-https URI (expected https://host:port/...): %s\n", output_https_target);
+		return 2;
+	}
+
+	if (output_http_target && output_https_target) {
+		err_printf("Use only one of --output-http or --output-https\n");
+		return 2;
+	}
+
 	if (output_http_target)
 		g_output_http_uri = output_http_target;
+	if (output_https_target)
+		g_output_http_uri = output_https_target;
 
 	if (g_send_logs && pull_mode) {
 		err_printf("--send-logs cannot be combined with --pull\n");
@@ -1057,20 +1084,20 @@ int fw_image_scan_main(int argc, char **argv)
 	}
 
 	if (pull_mode) {
-		if (!dev_override || !offset_set || (!output_tcp_target && !output_http_target)) {
-			err_printf("--pull requires --dev, --offset, and either --output-tcp or --output-http\n");
+		if (!dev_override || !offset_set || (!output_tcp_target && !g_output_http_uri)) {
+			err_printf("--pull requires --dev, --offset, and either --output-tcp, --output-http, or --output-https\n");
 			return 2;
 		}
-		if (output_tcp_target && output_http_target) {
-			err_printf("--pull accepts only one of --output-tcp or --output-http\n");
+		if (output_tcp_target && g_output_http_uri) {
+			err_printf("--pull accepts only one of --output-tcp, --output-http, or --output-https\n");
 			return 2;
 		}
 		if (find_address) {
 			err_printf("--find-address cannot be combined with --pull\n");
 			return 2;
 		}
-		if (output_http_target)
-			return pull_image_to_output_http(dev_override, pull_offset, output_http_target);
+		if (g_output_http_uri)
+			return pull_image_to_output_http(dev_override, pull_offset, g_output_http_uri);
 		return pull_image_to_output_tcp(dev_override, pull_offset, output_tcp_target);
 	}
 
@@ -1165,6 +1192,7 @@ out:
 				 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 				 g_output_http_len,
 				 image_http_content_type(),
+				 g_insecure,
 				 errbuf,
 				 sizeof(errbuf)) < 0) {
 			err_printf("Failed to POST output to %s: %s\n", g_output_http_uri,

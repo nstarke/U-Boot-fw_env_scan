@@ -139,14 +139,17 @@ int fw_send_all(int sock, const uint8_t *buf, size_t len)
 }
 
 int fw_http_post(const char *uri, const uint8_t *data, size_t len,
-		 const char *content_type, char *errbuf, size_t errbuf_len)
+		 const char *content_type, bool insecure,
+		 char *errbuf, size_t errbuf_len)
 {
 	CURL *curl;
 	CURLcode rc;
 	long http_code = 0;
 	struct curl_slist *headers = NULL;
+	struct curl_blob ca_blob;
 	char header_line[256];
 	static bool curl_global_ready;
+	bool is_https = false;
 
 	if (errbuf && errbuf_len)
 		errbuf[0] = '\0';
@@ -156,6 +159,8 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 			snprintf(errbuf, errbuf_len, "HTTP URI is empty");
 		return -1;
 	}
+
+	is_https = !strncmp(uri, "https://", 8);
 
 	if (!curl_global_ready) {
 		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
@@ -190,6 +195,25 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+	if (is_https) {
+		if (insecure) {
+			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+		} else {
+			ca_blob.data = (void *)fw_default_ca_bundle_pem;
+			ca_blob.len = fw_default_ca_bundle_pem_len;
+			ca_blob.flags = CURL_BLOB_COPY;
+			rc = curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &ca_blob);
+			if (rc != CURLE_OK) {
+				if (errbuf && errbuf_len)
+					snprintf(errbuf, errbuf_len, "failed to configure HTTPS CA bundle: %s",
+						 curl_easy_strerror(rc));
+				curl_slist_free_all(headers);
+				curl_easy_cleanup(curl);
+				return -1;
+			}
+		}
+	}
 
 	rc = curl_easy_perform(curl);
 	if (rc != CURLE_OK) {

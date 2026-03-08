@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import shutil
+import ssl
+import subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -36,18 +39,68 @@ def build_handler(log_path: Path):
     return PostLoggerHandler
 
 
+def ensure_self_signed_cert(cert_path: Path, key_path: Path) -> None:
+    if cert_path.exists() and key_path.exists():
+        return
+
+    openssl = shutil.which("openssl")
+    if not openssl:
+        raise RuntimeError(
+            "--https requires openssl to generate a self-signed certificate when cert/key are missing"
+        )
+
+    cert_path.parent.mkdir(parents=True, exist_ok=True)
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        openssl,
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-sha256",
+        "-days",
+        "3650",
+        "-nodes",
+        "-subj",
+        "/CN=localhost",
+        "-addext",
+        "subjectAltName=DNS:localhost,IP:127.0.0.1",
+        "-keyout",
+        str(key_path),
+        "-out",
+        str(cert_path),
+    ]
+
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Receive HTTP POST requests and log them to a file")
     parser.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=5000, help="Bind port (default: 5000)")
     parser.add_argument("--log", default="post_requests.log", help="Log file path")
+    parser.add_argument("--https", action="store_true", help="Enable HTTPS with TLS")
+    parser.add_argument("--cert", default="tools/certs/localhost.crt", help="TLS cert path")
+    parser.add_argument("--key", default="tools/certs/localhost.key", help="TLS private key path")
     args = parser.parse_args()
 
     log_path = Path(args.log)
     handler = build_handler(log_path)
     server = HTTPServer((args.host, args.port), handler)
 
-    print(f"Listening on http://{args.host}:{args.port}/")
+    scheme = "http"
+    if args.https:
+        cert_path = Path(args.cert)
+        key_path = Path(args.key)
+        ensure_self_signed_cert(cert_path, key_path)
+
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(certfile=str(cert_path), keyfile=str(key_path))
+        server.socket = ctx.wrap_socket(server.socket, server_side=True)
+        scheme = "https"
+
+    print(f"Listening on {scheme}://{args.host}:{args.port}/")
     print(f"Logging POST requests to: {log_path}")
     try:
         server.serve_forever()

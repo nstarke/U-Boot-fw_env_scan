@@ -16,8 +16,12 @@ Global option:
   - when `--verbose` is enabled with `csv`/`json`, verbose messages are emitted as structured `verbose` records (instead of plain text lines)
 - `env --output-tcp <ip:port>` sends the same formatted stream selected by `--output-format` over TCP.
 - `env --output-http <http://host:port/path>` sends the same formatted stream selected by `--output-format` in a single HTTP POST request.
+- `env --output-https <https://host:port/path>` sends the same formatted stream selected by `--output-format` in a single HTTPS POST request using embedded CA certificates.
+- `env --insecure` disables TLS certificate and hostname verification for HTTPS output.
 - `image --output-tcp` is used for `--pull` binary streaming; for formatted scan/find-address output over TCP, use `image --send-logs --output-tcp ...`.
 - `image --output-http <http://host:port/path>` can be used to POST formatted scan/find-address output, or to POST pulled image bytes when used with `--pull`.
+- `image --output-https <https://host:port/path>` can be used to POST formatted scan/find-address output, or to POST pulled image bytes when used with `--pull`, using embedded CA certificates.
+- `image --insecure` disables TLS certificate and hostname verification for HTTPS output.
 
 ---
 
@@ -47,6 +51,10 @@ Notes:
 - `libcsv` is built from source directly from `third_party/libcsv/libcsv.c`.
 - `json-c` is built from source from the `third_party/json-c` submodule via CMake, and linked statically (`third_party/json-c/build/libjson-c.a`).
 - `libcurl` is built from source from the `third_party/curl` submodule via CMake, and linked statically (`third_party/curl/build/lib/libcurl.a`).
+- The default CA bundle is fetched from `https://curl.se/ca/cacert.pem` at build time and embedded into the binary.
+- Override bundle source with:
+  - `CA_BUNDLE_URL=<url>` to change download URL
+  - `CA_BUNDLE_PEM=<path>` to use a local PEM file instead of downloading
 
 Static build:
 
@@ -126,6 +134,8 @@ Scans MTD/UBI plus block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`)
 - `--output-config[=<path>]` — write discovered `fw_env.config` lines to file (default `fw_env.config`)
 - `--output-tcp <IPv4:port>` — duplicate output to TCP destination
 - `--output-http <http://host:port/path>` — duplicate output to HTTP endpoint via POST
+- `--output-https <https://host:port/path>` — duplicate output to HTTPS endpoint via POST
+- `--insecure` — disable TLS certificate and hostname verification for HTTPS output
 - `--write <path>` — apply env updates from text file (native `fw_setenv`-style behavior)
 
 ### `--write` behavior
@@ -159,6 +169,7 @@ Scans MTD/UBI plus block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`)
 ./uboot_audit env --size 0x10000 /dev/mtd0:0x10000 /dev/mtd1:0x20000
 ./uboot_audit env --output-tcp 192.168.1.50:5000 --verbose
 ./uboot_audit env --output-http http://192.168.1.50:5000/env --verbose
+./uboot_audit env --output-https https://192.168.1.50:5443/env --verbose
 ./uboot_audit env --write ./new_env.txt
 ```
 
@@ -197,6 +208,8 @@ Scans MTD/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`) 
 - `--offset <bytes>` — image offset used by `--pull` or `--find-address`
 - `--output-tcp <IPv4:port>` — TCP destination used by `--pull`
 - `--output-http <http://host:port/path>` — HTTP destination used by `--pull` (POST body contains image bytes), or for posting normal command output
+- `--output-https <https://host:port/path>` — HTTPS destination used by `--pull` (POST body contains image bytes), or for posting normal command output
+- `--insecure` — disable TLS certificate and hostname verification for HTTPS output
 - `--find-address` — parse image at `--offset` and print load address (uImage/FIT)
 
 ### `image` argument constraints
@@ -204,7 +217,7 @@ Scans MTD/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`) 
 - `--pull` **requires**:
   - `--dev`
   - `--offset`
-  - either `--output-tcp` or `--output-http`
+  - exactly one of `--output-tcp`, `--output-http`, or `--output-https`
 - `--find-address` **requires**:
   - `--dev`
   - `--offset`
@@ -255,7 +268,9 @@ Pull image bytes to TCP listener:
 ```bash
 ./uboot_audit image --pull --dev /dev/mtdblock4 --offset 0x200 --output-tcp 192.168.1.50:5000
 ./uboot_audit image --pull --dev /dev/mtdblock4 --offset 0x200 --output-http http://192.168.1.50:5000/image
+./uboot_audit image --pull --dev /dev/mtdblock4 --offset 0x200 --output-https https://192.168.1.50:5443/image
 ./uboot_audit image --verbose --output-http http://192.168.1.50:5000/image
+./uboot_audit image --verbose --output-https https://192.168.1.50:5443/image
 ```
 
 ---

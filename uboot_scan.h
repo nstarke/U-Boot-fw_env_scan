@@ -41,7 +41,10 @@ uint32_t fw_read_be32(const uint8_t *p);
 int fw_connect_tcp_ipv4(const char *spec);
 int fw_send_all(int sock, const uint8_t *buf, size_t len);
 int fw_http_post(const char *uri, const uint8_t *data, size_t len,
-		 const char *content_type, char *errbuf, size_t errbuf_len);
+		 const char *content_type, bool insecure,
+		 char *errbuf, size_t errbuf_len);
+extern const unsigned char fw_default_ca_bundle_pem[];
+extern const size_t fw_default_ca_bundle_pem_len;
 void fw_crc32_init(uint32_t table[256]);
 uint32_t fw_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len);
 

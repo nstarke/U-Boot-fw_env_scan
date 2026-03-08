@@ -32,6 +32,7 @@ static uint32_t crc32_table[256];
 static bool g_verbose;
 static bool g_bruteforce;
 static bool g_parse_vars;
+static bool g_insecure;
 static int g_output_sock = -1;
 static const char *g_output_http_uri = NULL;
 static char *g_output_http_buf = NULL;
@@ -369,6 +370,7 @@ static int flush_output_http_buffer(void)
 			 (const uint8_t *)(g_output_http_buf ? g_output_http_buf : ""),
 			 g_output_http_len,
 			 env_http_content_type(),
+			 g_insecure,
 			 errbuf,
 			 sizeof(errbuf)) < 0) {
 		err_printf("Failed to POST output to %s: %s\n", g_output_http_uri,
@@ -1238,7 +1240,9 @@ static void usage(const char *prog)
 	err_printf("Usage: %s [--verbose] [--size <env_size>] [--hint <hint>] [--dev <dev>] [--brutefoce] [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc] [--output-config[=<path>]] [--write <path>] [<dev:step> ...]\n"
 		"             [--parse-vars]\n"
 		"             [--output-tcp <ip:port>]\n"
-		"             [--output-http <http://host:port/>]\n", prog);
+		"             [--output-http <http://host:port/>]\n"
+		"             [--output-https <https://host:port/>]\n"
+		"             [--insecure]\n", prog);
 }
 
 int fw_env_scan_main(int argc, char **argv)
@@ -1250,6 +1254,7 @@ int fw_env_scan_main(int argc, char **argv)
 	const char *dev_override = NULL;
 	const char *output_tcp_target = NULL;
 	const char *output_http_target = NULL;
+	const char *output_https_target = NULL;
 	const char *output_config_path = NULL;
 	const char *write_script_path = NULL;
 	bool write_mode = false;
@@ -1274,6 +1279,7 @@ int fw_env_scan_main(int argc, char **argv)
 	detect_output_format();
 	g_verbose = false;
 	g_bruteforce = false;
+	g_insecure = false;
 	g_csv_header_emitted = false;
 	g_parse_vars = false;
 	if (g_output_sock >= 0) {
@@ -1297,11 +1303,13 @@ int fw_env_scan_main(int argc, char **argv)
 		{ "output-config", optional_argument, NULL, 'c' },
 		{ "output-tcp", required_argument, NULL, 'o' },
 		{ "output-http", required_argument, NULL, 'O' },
+		{ "output-https", required_argument, NULL, 'T' },
+		{ "insecure", no_argument, NULL, 'k' },
 		{ "write", required_argument, NULL, 'w' },
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:O:RMUSEPc::w:", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvs:H:d:bo:O:T:kRMUSEPc::w:", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h': usage(argv[0]); return 0;
 		case 'v': g_verbose = true; break;
@@ -1318,6 +1326,8 @@ int fw_env_scan_main(int argc, char **argv)
 		case 'c': output_config_path = optarg ? optarg : "fw_env.config"; break;
 		case 'o': output_tcp_target = optarg; break;
 		case 'O': output_http_target = optarg; break;
+		case 'T': output_https_target = optarg; break;
+		case 'k': g_insecure = true; break;
 		case 'w': write_script_path = optarg; break;
 		default: usage(argv[0]); return 2;
 		}
@@ -1380,6 +1390,20 @@ int fw_env_scan_main(int argc, char **argv)
 			goto out;
 		}
 		g_output_http_uri = output_http_target;
+	}
+
+	if (output_https_target && *output_https_target) {
+		if (strncmp(output_https_target, "https://", 8)) {
+			err_printf("Invalid --output-https URI (expected https://host:port/...): %s\n", output_https_target);
+			ret = 2;
+			goto out;
+		}
+		if (g_output_http_uri) {
+			err_printf("Use only one of --output-http or --output-https\n");
+			ret = 2;
+			goto out;
+		}
+		g_output_http_uri = output_https_target;
 	}
 
 	if (output_config_path && *output_config_path) {
