@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -39,6 +40,7 @@ enum uboot_output_format {
 };
 
 static enum uboot_output_format g_output_format = FW_OUTPUT_TXT;
+static int g_output_sock = -1;
 static const char *g_output_http_uri;
 static char *g_output_http_buf;
 static size_t g_output_http_len;
@@ -60,6 +62,20 @@ static enum uboot_output_format detect_output_format(void)
 		return FW_OUTPUT_JSON;
 
 	return FW_OUTPUT_TXT;
+}
+
+static void send_to_output_socket(const char *buf, size_t len)
+{
+	while (g_output_sock >= 0 && len) {
+		ssize_t n = send(g_output_sock, buf, len, 0);
+		if (n <= 0) {
+			close(g_output_sock);
+			g_output_sock = -1;
+			return;
+		}
+		buf += n;
+		len -= (size_t)n;
+	}
 }
 
 static void append_output_http_buffer(const char *buf, size_t len)
@@ -107,6 +123,7 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 		return;
 
 	if ((size_t)needed < sizeof(stack)) {
+		send_to_output_socket(stack, (size_t)needed);
 		append_output_http_buffer(stack, (size_t)needed);
 		return;
 	}
@@ -118,6 +135,7 @@ static void emit_v(FILE *stream, const char *fmt, va_list ap)
 	va_copy(aq, ap);
 	vsnprintf(dyn, (size_t)needed + 1, fmt, aq);
 	va_end(aq);
+	send_to_output_socket(dyn, (size_t)needed);
 	append_output_http_buffer(dyn, (size_t)needed);
 	free(dyn);
 }
@@ -227,11 +245,30 @@ out:
 
 static int ensure_fw_env_config_exists(void)
 {
-	char *env_argv[] = {
-		"env",
-		"--output-config=fw_env.config",
-		NULL,
-	};
+	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
+	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
+	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE");
+	char *env_argv[8];
+	int env_argc = 0;
+
+	env_argv[env_argc++] = "env";
+	env_argv[env_argc++] = "--output-config=fw_env.config";
+	if (output_tcp && *output_tcp) {
+		env_argv[env_argc++] = "--output-tcp";
+		env_argv[env_argc++] = (char *)output_tcp;
+	}
+	if (output_http && *output_http) {
+		env_argv[env_argc++] = "--output-http";
+		env_argv[env_argc++] = (char *)output_http;
+	}
+	if (output_https && *output_https) {
+		env_argv[env_argc++] = "--output-https";
+		env_argv[env_argc++] = (char *)output_https;
+	}
+	if (output_insecure && *output_insecure && strcmp(output_insecure, "0"))
+		env_argv[env_argc++] = "--insecure";
+	env_argv[env_argc] = NULL;
 
 	if (access("fw_env.config", F_OK) == 0)
 		return 0;
@@ -239,7 +276,7 @@ static int ensure_fw_env_config_exists(void)
 	if (access("uboot_env.config", F_OK) == 0)
 		return copy_file_contents("uboot_env.config", "fw_env.config");
 
-	return uboot_env_scan_main(2, env_argv);
+	return uboot_env_scan_main(env_argc, env_argv);
 }
 
 static const char *resolve_first_readable_glob(const char *pattern, char **owned_path)
@@ -773,6 +810,7 @@ int uboot_audit_scan_main(int argc, char **argv)
 	fmt = detect_output_format();
 	g_output_format = fmt;
 	g_output_http_uri = NULL;
+	g_output_sock = -1;
 	g_output_http_buf = NULL;
 	g_output_http_len = 0;
 	g_output_http_cap = 0;
@@ -857,6 +895,30 @@ int uboot_audit_scan_main(int argc, char **argv)
 		output_http_uri = output_http_target;
 	if (output_https_target)
 		output_http_uri = output_https_target;
+
+	if (output_tcp_target && *output_tcp_target) {
+		g_output_sock = uboot_connect_tcp_ipv4(output_tcp_target);
+		if (g_output_sock < 0) {
+			err_printf("Invalid/failed output target (expected IPv4:port): %s\n", output_tcp_target);
+			ret = 1;
+			goto out;
+		}
+	}
+
+	if (output_tcp_target && *output_tcp_target)
+		setenv("FW_AUDIT_OUTPUT_TCP", output_tcp_target, 1);
+	else
+		unsetenv("FW_AUDIT_OUTPUT_TCP");
+	if (output_http_target && *output_http_target)
+		setenv("FW_AUDIT_OUTPUT_HTTP", output_http_target, 1);
+	else
+		unsetenv("FW_AUDIT_OUTPUT_HTTP");
+	if (output_https_target && *output_https_target)
+		setenv("FW_AUDIT_OUTPUT_HTTPS", output_https_target, 1);
+	else
+		unsetenv("FW_AUDIT_OUTPUT_HTTPS");
+	setenv("FW_AUDIT_OUTPUT_INSECURE", insecure ? "1" : "0", 1);
+
 	g_output_http_uri = output_http_uri;
 	g_http_insecure = insecure;
 	g_http_verbose = verbose;
@@ -1021,6 +1083,8 @@ out:
 		ret = 1;
 	if (fd >= 0)
 		close(fd);
+	if (g_output_sock >= 0)
+		close(g_output_sock);
 	free(scanned_blob_path);
 	free(scanned_pubkey_path);
 	free(buf);

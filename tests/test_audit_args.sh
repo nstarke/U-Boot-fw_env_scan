@@ -26,8 +26,23 @@ PEM
 run_exact_case "audit --help" 0 "$BIN" audit --help
 run_accept_case "audit --list-rules" "$BIN" audit --list-rules
 
+for output_format in txt csv json
+do
+    run_accept_case "audit --list-rules with --output-format ${output_format}" \
+        "$BIN" --output-format "$output_format" audit --list-rules
+done
+
 run_accept_case "audit required args: --dev --size" \
     "$BIN" audit --dev /dev/null --size "$TEST_SIZE"
+
+for output_format in txt csv json
+do
+    run_accept_case "audit (no --rule) with --output-format ${output_format}" \
+        "$BIN" --output-format "$output_format" audit --dev /dev/null --size "$TEST_SIZE"
+
+    run_accept_case "audit --offset (no --rule) with --output-format ${output_format}" \
+        "$BIN" --output-format "$output_format" audit --dev /dev/null --offset 0x0 --size "$TEST_SIZE"
+done
 
 run_accept_case "audit --rule uboot_validate_crc32" \
     "$BIN" audit --rule uboot_validate_crc32 --dev /dev/null --size "$TEST_SIZE"
@@ -43,6 +58,20 @@ run_accept_case "audit --rule uboot_validate_cmdline_init_writeability" \
 
 run_accept_case "audit --rule uboot_validate_secureboot" \
     "$BIN" audit --rule uboot_validate_secureboot --dev /dev/null --size "$TEST_SIZE"
+
+for rule in \
+    uboot_validate_crc32 \
+    uboot_validate_env_writeability \
+    uboot_validate_env_security \
+    uboot_validate_cmdline_init_writeability \
+    uboot_validate_secureboot
+do
+    for output_format in txt csv json
+    do
+        run_accept_case "audit --rule ${rule} with --output-format ${output_format}" \
+            "$BIN" --output-format "$output_format" audit --rule "$rule" --dev /dev/null --size "$TEST_SIZE"
+    done
+done
 
 run_accept_case "audit --offset" \
     "$BIN" audit --dev /dev/null --offset 0x0 --size "$TEST_SIZE"

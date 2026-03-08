@@ -4,21 +4,42 @@
 
 #include <inttypes.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <unistd.h>
 
 static int ensure_fw_env_config_exists(void)
 {
-	char *argv[] = {
-		"env",
-		"--output-config",
-		NULL,
-	};
+	const char *output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
+	const char *output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
+	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
+	const char *output_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE");
+	char *argv[8];
+	int argc = 0;
+
+	argv[argc++] = "env";
+	argv[argc++] = "--output-config";
+	if (output_tcp && *output_tcp) {
+		argv[argc++] = "--output-tcp";
+		argv[argc++] = (char *)output_tcp;
+	}
+	if (output_http && *output_http) {
+		argv[argc++] = "--output-http";
+		argv[argc++] = (char *)output_http;
+	}
+	if (output_https && *output_https) {
+		argv[argc++] = "--output-https";
+		argv[argc++] = (char *)output_https;
+	}
+	if (output_insecure && *output_insecure && strcmp(output_insecure, "0"))
+		argv[argc++] = "--insecure";
+	argv[argc] = NULL;
 
 	if (access("uboot_env.config", F_OK) == 0)
 		return 0;
 
-	return uboot_env_scan_main(2, argv);
+	return uboot_env_scan_main(argc, argv);
 }
 
 static int run_validate_crc32(const struct uboot_audit_input *input, char *message, size_t message_len)
