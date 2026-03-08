@@ -138,6 +138,74 @@ int fw_send_all(int sock, const uint8_t *buf, size_t len)
 	return 0;
 }
 
+char *fw_http_uri_normalize_default_port(const char *uri, uint16_t default_port)
+{
+	const char *scheme_end;
+	const char *authority;
+	const char *authority_end;
+	const char *path;
+	const char *host_start;
+	const char *at;
+	const char *port_sep = NULL;
+	char port_buf[8];
+	char *out;
+	size_t prefix_len;
+	size_t suffix_len;
+	size_t port_len;
+
+	if (!uri || !*uri)
+		return NULL;
+
+	scheme_end = strstr(uri, "://");
+	if (!scheme_end)
+		return strdup(uri);
+
+	authority = scheme_end + 3;
+	authority_end = authority;
+	while (*authority_end && *authority_end != '/' && *authority_end != '?' && *authority_end != '#')
+		authority_end++;
+
+	if (authority == authority_end)
+		return strdup(uri);
+
+	path = authority_end;
+	at = memchr(authority, '@', (size_t)(authority_end - authority));
+	host_start = at ? (at + 1) : authority;
+
+	if (host_start >= authority_end)
+		return strdup(uri);
+
+	if (*host_start == '[') {
+		const char *host_end = memchr(host_start, ']', (size_t)(authority_end - host_start));
+		if (!host_end)
+			return strdup(uri);
+		if (host_end + 1 < authority_end && *(host_end + 1) == ':')
+			port_sep = host_end + 1;
+	} else {
+		for (const char *p = host_start; p < authority_end; p++) {
+			if (*p == ':')
+				port_sep = p;
+		}
+	}
+
+	if (port_sep)
+		return strdup(uri);
+
+	snprintf(port_buf, sizeof(port_buf), ":%u", (unsigned int)default_port);
+	port_len = strlen(port_buf);
+	prefix_len = (size_t)(authority_end - uri);
+	suffix_len = strlen(path);
+
+	out = malloc(prefix_len + port_len + suffix_len + 1);
+	if (!out)
+		return NULL;
+
+	memcpy(out, uri, prefix_len);
+	memcpy(out + prefix_len, port_buf, port_len);
+	memcpy(out + prefix_len + port_len, path, suffix_len + 1);
+	return out;
+}
+
 int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 		 const char *content_type, bool insecure,
 		 char *errbuf, size_t errbuf_len)
@@ -150,6 +218,8 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 	char header_line[256];
 	static bool curl_global_ready;
 	bool is_https = false;
+	char *normalized_uri = NULL;
+	const char *effective_uri = uri;
 
 	if (errbuf && errbuf_len)
 		errbuf[0] = '\0';
@@ -161,11 +231,24 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 	}
 
 	is_https = !strncmp(uri, "https://", 8);
+	if (!strncmp(uri, "http://", 7)) {
+		normalized_uri = fw_http_uri_normalize_default_port(uri, 80);
+	} else if (is_https) {
+		normalized_uri = fw_http_uri_normalize_default_port(uri, 443);
+	}
+	if ((!strncmp(uri, "http://", 7) || is_https) && !normalized_uri) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "failed to normalize HTTP URI");
+		return -1;
+	}
+	if (normalized_uri)
+		effective_uri = normalized_uri;
 
 	if (!curl_global_ready) {
 		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
 			if (errbuf && errbuf_len)
 				snprintf(errbuf, errbuf_len, "curl_global_init failed");
+			free(normalized_uri);
 			return -1;
 		}
 		curl_global_ready = true;
@@ -175,6 +258,7 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 	if (!curl) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "curl_easy_init failed");
+		free(normalized_uri);
 		return -1;
 	}
 
@@ -186,9 +270,10 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to prepare HTTP headers");
 		curl_easy_cleanup(curl);
+		free(normalized_uri);
 		return -1;
 	}
-	curl_easy_setopt(curl, CURLOPT_URL, uri);
+	curl_easy_setopt(curl, CURLOPT_URL, effective_uri);
 	curl_easy_setopt(curl, CURLOPT_POST, 1L);
 	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, (const char *)data);
 	curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t)len);
@@ -210,6 +295,7 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 						 curl_easy_strerror(rc));
 				curl_slist_free_all(headers);
 				curl_easy_cleanup(curl);
+				free(normalized_uri);
 				return -1;
 			}
 		}
@@ -221,6 +307,7 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 			snprintf(errbuf, errbuf_len, "curl perform failed: %s", curl_easy_strerror(rc));
 		curl_slist_free_all(headers);
 		curl_easy_cleanup(curl);
+		free(normalized_uri);
 		return -1;
 	}
 
@@ -231,8 +318,11 @@ int fw_http_post(const char *uri, const uint8_t *data, size_t len,
 	if (http_code < 200 || http_code >= 300) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "HTTP status %ld", http_code);
+		free(normalized_uri);
 		return -1;
 	}
+
+	free(normalized_uri);
 
 	return 0;
 }
