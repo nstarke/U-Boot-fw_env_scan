@@ -4,6 +4,7 @@ This repo provides a Linux host-side C utility for U-Boot-related flash analysis
 
 - `uboot_audit env`: find U-Boot environment candidates and print `fw_env.config` lines.
 - `uboot_audit image`: find likely U-Boot image headers, optionally pull image bytes, or resolve load address.
+- `uboot_audit audit`: run audit rules (from `audit-rules/*.c`) against selected bytes.
 
 Both tools are intended for embedded/Linux recovery and diagnostics workflows.
 
@@ -272,6 +273,33 @@ Pull image bytes to TCP listener:
 ./uboot_audit image --verbose --output-http http://192.168.1.50:5000/image
 ./uboot_audit image --verbose --output-https https://192.168.1.50:5443/image
 ```
+
+---
+
+## `uboot_audit audit`
+
+Runs compiled audit rules that are defined under `audit-rules/` (one `.c` file per rule).
+
+### `audit` arguments
+
+- `--list-rules` — list available compiled rules
+- `--rule <name>` — run a single rule by name
+- `--dev <device>` — input device/file to audit
+- `--offset <bytes>` — read offset (default `0`)
+- `--size <bytes>` — number of bytes to read and pass to rules
+- `--verbose` — enable verbose rule behavior where supported
+
+### `audit` examples
+
+```bash
+./uboot_audit audit --list-rules
+./uboot_audit audit --dev /dev/mtdblock4 --offset 0x0 --size 0x10000
+./uboot_audit audit --rule uboot_validate_crc32 --dev /dev/mtdblock4 --offset 0x0 --size 0x10000
+```
+
+Initial rule included:
+
+- `uboot_validate_crc32` — validates U-Boot environment CRC32 using standard and redundant layouts.
 
 ---
 

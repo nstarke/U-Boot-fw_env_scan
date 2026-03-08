@@ -51,5 +51,29 @@ uint32_t fw_crc32_calc(const uint32_t table[256], const uint8_t *buf, size_t len
 
 int fw_env_scan_main(int argc, char **argv);
 int fw_image_scan_main(int argc, char **argv);
+int fw_audit_scan_main(int argc, char **argv);
+
+struct fw_audit_input {
+	const char *device;
+	uint64_t offset;
+	const uint8_t *data;
+	size_t data_len;
+	const uint32_t *crc32_table;
+	bool verbose;
+};
+
+struct fw_audit_rule {
+	const char *name;
+	const char *description;
+	int (*run)(const struct fw_audit_input *input, char *message, size_t message_len);
+};
+
+#define FW_AUDIT_RULE_SECTION "fw_audit_rules"
+#define FW_REGISTER_AUDIT_RULE(symbol) \
+	static const struct fw_audit_rule * const __fw_audit_rule_ptr_##symbol \
+	__attribute__((used, section(FW_AUDIT_RULE_SECTION))) = &(symbol)
+
+extern const struct fw_audit_rule * const __start_fw_audit_rules[];
+extern const struct fw_audit_rule * const __stop_fw_audit_rules[];
 
 #endif

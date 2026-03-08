@@ -17,11 +17,13 @@ static void usage(const char *prog)
 		"Subcommands:\n"
 		"  env     Scan for U-Boot environment candidates (fw_env_scan behavior)\n"
 		"  image   Scan or extract U-Boot images (fw_image_scan behavior)\n"
+		"  audit   Run audit rules against device data\n"
 		"\n"
 		"Examples:\n"
 		"  %s env --verbose\n"
-		"  %s image --dev /dev/mtdblock4 --step 0x1000\n",
-		prog, prog, prog);
+		"  %s image --dev /dev/mtdblock4 --step 0x1000\n"
+		"  %s audit --dev /dev/mtdblock4 --offset 0x0 --size 0x10000\n",
+		prog, prog, prog, prog);
 }
 
 int main(int argc, char **argv)
@@ -86,6 +88,9 @@ int main(int argc, char **argv)
 
 	if (!strcmp(argv[cmd_idx], "image"))
 		return fw_image_scan_main(argc - cmd_idx, argv + cmd_idx);
+
+	if (!strcmp(argv[cmd_idx], "audit"))
+		return fw_audit_scan_main(argc - cmd_idx, argv + cmd_idx);
 
 	fprintf(stderr, "Unknown subcommand: %s\n\n", argv[cmd_idx]);
 	usage(argv[0]);
