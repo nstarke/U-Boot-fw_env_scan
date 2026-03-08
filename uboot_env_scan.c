@@ -31,6 +31,40 @@ static bool g_bruteforce;
 static int g_output_sock = -1;
 static FILE *g_output_config_fp = NULL;
 
+struct env_candidate {
+	uint64_t cfg_off;
+	bool crc_standard;
+	bool crc_redundant;
+};
+
+static int add_or_merge_candidate(struct env_candidate **cands, size_t *count,
+					  uint64_t cfg_off, bool crc_standard, bool crc_redundant)
+{
+	struct env_candidate *tmp;
+
+	if (!cands || !count)
+		return -1;
+
+	for (size_t i = 0; i < *count; i++) {
+		if ((*cands)[i].cfg_off != cfg_off)
+			continue;
+		(*cands)[i].crc_standard = (*cands)[i].crc_standard || crc_standard;
+		(*cands)[i].crc_redundant = (*cands)[i].crc_redundant || crc_redundant;
+		return 0;
+	}
+
+	tmp = realloc(*cands, (*count + 1) * sizeof(**cands));
+	if (!tmp)
+		return -1;
+
+	*cands = tmp;
+	(*cands)[*count].cfg_off = cfg_off;
+	(*cands)[*count].crc_standard = crc_standard;
+	(*cands)[*count].crc_redundant = crc_redundant;
+	(*count)++;
+	return 0;
+}
+
 static void send_to_output_socket(const char *buf, size_t len)
 {
 	while (g_output_sock >= 0 && len) {
@@ -150,6 +184,8 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 	uint64_t erase_size;
 	uint64_t sector_count;
 	uint64_t cfg_off;
+	struct env_candidate *cands = NULL;
+	size_t cand_count = 0;
 
 	fd = open(dev, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
@@ -194,16 +230,27 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 		uint32_t stored_le = read_le32(buf);
 		uint32_t stored_be = fw_read_be32(buf);
 		uint32_t calc = fw_crc32_calc(crc32_table, buf + 4, (size_t)env_size - 4);
+		uint32_t calc_redund = (env_size > 5)
+			? fw_crc32_calc(crc32_table, buf + 5, (size_t)env_size - 5)
+			: 0;
+		bool crc_ok_std = (calc == stored_le || calc == stored_be);
+		bool crc_ok_redund = (env_size > 5) && (calc_redund == stored_le || calc_redund == stored_be);
 		bool hint_ok = has_hint_var(buf + 4, (size_t)env_size - 4, hint_override);
+		bool hint_ok_redund = (env_size > 5) && has_hint_var(buf + 5, (size_t)env_size - 5, hint_override);
 
-		if (!g_bruteforce && calc != stored_le && calc != stored_be)
+		if (!g_bruteforce && !crc_ok_std && !crc_ok_redund)
 			continue;
-		if (g_bruteforce && !hint_ok)
+		if (g_bruteforce && !hint_ok && !hint_ok_redund)
 			continue;
 
 		cfg_off = erase_size ? ((uint64_t)off - ((uint64_t)off % erase_size)) : (uint64_t)off;
+		(void)add_or_merge_candidate(&cands, &cand_count, cfg_off, crc_ok_std, crc_ok_redund);
+
 		if (g_bruteforce)
 			out_printf("  candidate offset=0x%jx  mode=hint-only  (has known vars)\n", (uintmax_t)off);
+		else if (crc_ok_redund && !crc_ok_std)
+			out_printf("  candidate offset=0x%jx  crc=%s-endian  %s (redundant-env layout)\n", (uintmax_t)off,
+				(calc_redund == stored_le) ? "LE" : "BE", hint_ok_redund ? "(has known vars)" : "(crc ok)");
 		else
 			out_printf("  candidate offset=0x%jx  crc=%s-endian  %s\n", (uintmax_t)off,
 				(calc == stored_le) ? "LE" : "BE", hint_ok ? "(has known vars)" : "(crc ok)");
@@ -219,6 +266,22 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 		hits++;
 	}
 
+	if (cand_count >= 2 && erase_size) {
+		uint64_t expected = erase_size * (sector_count ? sector_count : 1);
+		for (size_t i = 1; i < cand_count; i++) {
+			uint64_t prev = cands[i - 1].cfg_off;
+			uint64_t curr = cands[i].cfg_off;
+			uint64_t diff = curr - prev;
+
+			if (diff != erase_size && diff != expected)
+				continue;
+
+			out_printf("    redundant env candidate pair: %s 0x%jx <-> 0x%jx\n",
+				dev, (uintmax_t)prev, (uintmax_t)curr);
+		}
+	}
+
+	free(cands);
 	free(buf);
 	close(fd);
 	return hits;
