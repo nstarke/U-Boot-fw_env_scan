@@ -18,6 +18,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 
+RELEASE_STATE_FILE = ".release_state.json"
+
+
 def augment_json_payload(payload: bytes, timestamp: str, src_ip: str) -> bytes:
     """Add timestamp/src_ip fields to JSON object payloads (supports NDJSON)."""
     text = payload.decode("utf-8", errors="strict")
@@ -65,15 +68,61 @@ def github_json_get(url: str, token: str | None = None) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def download_latest_release_assets(
-    repo: str,
+def get_latest_release(repo: str, token: str | None = None) -> dict:
+    release_url = f"https://api.github.com/repos/{repo}/releases/latest"
+    return github_json_get(release_url, token=token)
+
+
+def release_identity(release: dict) -> str:
+    tag_name = release.get("tag_name")
+    if tag_name:
+        return str(tag_name)
+    release_id = release.get("id")
+    if release_id is not None:
+        return str(release_id)
+    return ""
+
+
+def load_cached_release_identity(out_dir: Path) -> str | None:
+    state_path = out_dir / RELEASE_STATE_FILE
+    if not state_path.exists():
+        return None
+
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    cached = state.get("release")
+    if isinstance(cached, str) and cached:
+        return cached
+    return None
+
+
+def save_cached_release_identity(out_dir: Path, release: str) -> None:
+    state_path = out_dir / RELEASE_STATE_FILE
+    state = {
+        "release": release,
+        "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+    state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def clear_downloaded_assets(out_dir: Path) -> None:
+    for child in out_dir.iterdir():
+        if child.name == RELEASE_STATE_FILE:
+            continue
+        if child.is_file() or child.is_symlink():
+            child.unlink()
+
+
+def download_release_assets(
+    release: dict,
     out_dir: Path,
     token: str | None = None,
     force_download: bool = False,
 ) -> tuple[list[Path], list[Path]]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    release_url = f"https://api.github.com/repos/{repo}/releases/latest"
-    release = github_json_get(release_url, token=token)
     assets = release.get("assets", [])
 
     downloaded: list[Path] = []
@@ -328,12 +377,43 @@ def main() -> int:
     token = args.github_token or None
 
     try:
-        downloaded, skipped_existing = download_latest_release_assets(
-            args.repo,
-            assets_dir,
-            token=token,
-            force_download=args.force_download,
-        )
+        latest_release = get_latest_release(args.repo, token=token)
+        latest_release_id = release_identity(latest_release)
+        cached_release_id = load_cached_release_identity(assets_dir)
+        is_new_release = bool(latest_release_id) and latest_release_id != cached_release_id
+
+        if args.force_download:
+            print("Force download enabled; refreshing release binaries")
+            clear_downloaded_assets(assets_dir)
+            downloaded, skipped_existing = download_release_assets(
+                latest_release,
+                assets_dir,
+                token=token,
+                force_download=True,
+            )
+            if latest_release_id:
+                save_cached_release_identity(assets_dir, latest_release_id)
+        elif is_new_release:
+            prev = cached_release_id or "<none>"
+            print(f"New release detected ({prev} -> {latest_release_id}); refreshing binaries")
+            clear_downloaded_assets(assets_dir)
+            downloaded, skipped_existing = download_release_assets(
+                latest_release,
+                assets_dir,
+                token=token,
+                force_download=True,
+            )
+            save_cached_release_identity(assets_dir, latest_release_id)
+        else:
+            print("No new release detected; keeping existing binaries")
+            downloaded, skipped_existing = download_release_assets(
+                latest_release,
+                assets_dir,
+                token=token,
+                force_download=False,
+            )
+            if latest_release_id and cached_release_id != latest_release_id:
+                save_cached_release_identity(assets_dir, latest_release_id)
     except urllib.error.HTTPError as exc:
         print(f"Failed to fetch/download release assets from {args.repo}: HTTP {exc.code}")
         return 1
