@@ -7,7 +7,7 @@ Scans MTD/UBI and block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`) 
 - `--verbose` — print scan progress
 - `--dev <device>` — restrict scan or action to one device
 - `--step <bytes>` — scan stride (default `0x1000`)
-- `--allow-text` — also match plain `U-Boot` text (higher false-positive risk)
+- `--allow-text[=<text>]` — also match plain text (default `U-Boot`; higher false-positive risk)
 - `--skip-remove` — keep any helper `/dev` nodes created during scan
 - `--skip-mtd` — skip MTD/mtdblock scan targets
 - `--skip-ubi` — skip UBI/ubiblock scan targets

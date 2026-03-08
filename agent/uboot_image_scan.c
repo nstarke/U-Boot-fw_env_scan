@@ -35,6 +35,7 @@
 
 static bool g_verbose;
 static bool g_allow_text;
+static const char *g_allow_text_pattern = "U-Boot";
 static bool g_send_logs;
 static bool g_insecure;
 static uint32_t g_crc32_table[256];
@@ -1017,7 +1018,7 @@ static void usage(const char *prog)
 		"  --verbose: print scan progress\n"
 		"  --dev: scan only a specific device\n"
 		"  --step: step size when scanning (default: 0x1000)\n"
-		"  --allow-text: also match plain 'U-Boot' string (higher false-positive risk)\n"
+		"  --allow-text[=<text>]: also match plain text (default: 'U-Boot'; higher false-positive risk)\n"
 		"  --skip-remove: keep any helper /dev nodes created during scan\n"
 		"  --skip-mtd: skip MTD and mtdblock scan targets\n"
 		"  --skip-ubi: skip UBI and ubiblock scan targets\n"
@@ -1300,7 +1301,8 @@ static int scan_dev_for_image(const char *dev, uint64_t step)
 {
 	static const uint8_t uimage_magic[] = { 0x27, 0x05, 0x19, 0x56 };
 	static const uint8_t fit_magic[] = { 0xD0, 0x0D, 0xFE, 0xED };
-	static const char uboot_text[] = "U-Boot";
+	const char *text_pattern = g_allow_text_pattern ? g_allow_text_pattern : "U-Boot";
+	size_t text_pattern_len = strlen(text_pattern);
 	int fd;
 	struct stat st;
 	uint64_t size = 0;
@@ -1366,9 +1368,9 @@ static int scan_dev_for_image(const char *dev, uint64_t step)
 			}
 		}
 
-		if (g_allow_text) {
-			for (size_t i = 0; i + sizeof(uboot_text) - 1 <= (size_t)n; i++) {
-				if (!memcmp(buf + i, uboot_text, sizeof(uboot_text) - 1)) {
+		if (g_allow_text && text_pattern_len > 0) {
+			for (size_t i = 0; i + text_pattern_len <= (size_t)n; i++) {
+				if (!memcmp(buf + i, text_pattern, text_pattern_len)) {
 					report_signature(dev, off + i, "U-Boot-text");
 					hits++;
 				}
@@ -1412,6 +1414,7 @@ int uboot_image_scan_main(int argc, char **argv)
 	detect_output_format();
 	g_verbose = false;
 	g_allow_text = false;
+	g_allow_text_pattern = "U-Boot";
 	g_send_logs = false;
 	g_insecure = false;
 	g_csv_header_emitted = false;
@@ -1433,7 +1436,7 @@ int uboot_image_scan_main(int argc, char **argv)
 		{ "find-address", no_argument, NULL, 'a' },
 		{ "list-commands", no_argument, NULL, 'C' },
 		{ "send-logs", no_argument, NULL, 'L' },
-		{ "allow-text", no_argument, NULL, 't' },
+		{ "allow-text", optional_argument, NULL, 't' },
 		{ "skip-remove", no_argument, NULL, 'R' },
 		{ "skip-mtd", no_argument, NULL, 'M' },
 		{ "skip-ubi", no_argument, NULL, 'U' },
@@ -1443,7 +1446,7 @@ int uboot_image_scan_main(int argc, char **argv)
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvd:s:o:p:O:T:kPtaCLRMUSE", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvd:s:o:p:O:T:kPt::aCLRMUSE", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
@@ -1489,6 +1492,12 @@ int uboot_image_scan_main(int argc, char **argv)
 			break;
 		case 't':
 			g_allow_text = true;
+			if (optarg && *optarg) {
+				g_allow_text_pattern = optarg;
+			} else if (optind < argc && argv[optind] && argv[optind][0] != '-') {
+				g_allow_text_pattern = argv[optind];
+				optind++;
+			}
 			break;
 		case 'R':
 			skip_remove = true;

@@ -20,6 +20,8 @@ run_accept_case "image --verbose" "$BIN" image --verbose
 run_accept_case "image --dev" "$BIN" image --dev /dev/null
 run_accept_case "image --step" "$BIN" image --step 0x1000
 run_accept_case "image --allow-text" "$BIN" image --allow-text
+run_accept_case "image --allow-text=<text>" "$BIN" image --allow-text=BootROM
+run_accept_case "image --allow-text <text>" "$BIN" image --allow-text BootROM
 run_accept_case "image --skip-remove" "$BIN" image --skip-remove
 run_accept_case "image --skip-mtd" "$BIN" image --skip-mtd
 run_accept_case "image --skip-ubi" "$BIN" image --skip-ubi
