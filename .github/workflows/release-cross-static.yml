@@ -64,14 +64,6 @@ jobs:
           set -euo pipefail
           mkdir -p dist/${{ matrix.name }}
 
-          case "${{ matrix.zig_targets }}" in
-            *mips64-linux-musl*|*mips64-linux-gnu*|*mips64el-linux-musl*|*mips64el-linux-gnu*)
-              echo "ERROR: stale/non-ABI-specific mips64 target list detected: ${{ matrix.zig_targets }}"
-              echo "Expected ABI-specific variants like muslabi64/muslabin32/gnuabi64/gnuabin32."
-              exit 2
-              ;;
-          esac
-
           IFS=',' read -ra TARGETS <<< "${{ matrix.zig_targets }}"
           BUILT=0
           for T in "${TARGETS[@]}"; do
