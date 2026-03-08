@@ -9,6 +9,8 @@ WEB_SERVER=""
 OUTPUT_DIRECTORY=""
 TEMP_OUTPUT_DIRECTORY=""
 ISA=""
+LIST_ISA=0
+RELEASE_BINARIES_DIR="$SCRIPT_DIR/../tools/release_binaries"
 
 # Remove stale temporary download directories from previous runs.
 for stale_dir in /tmp/download_tests_output.*; do
@@ -19,6 +21,20 @@ done
 usage() {
     echo "usage: $0 --webserver <url> --isa <arch> [--output-directory <path>]"
     echo "   or: $0 --webserver=<url> --isa=<arch> [--output-directory=<path>]"
+    echo "   or: $0 --list-isa"
+}
+
+list_valid_isas() {
+    for bin_path in "$RELEASE_BINARIES_DIR"/uboot_audit-*; do
+        [ -e "$bin_path" ] || continue
+        [ -f "$bin_path" ] || continue
+        bin_name="$(basename "$bin_path")"
+        printf '%s\n' "${bin_name#uboot_audit-}"
+    done | sort -u
+}
+
+print_valid_isas() {
+    list_valid_isas
 }
 
 while [ "$#" -gt 0 ]; do
@@ -66,6 +82,10 @@ while [ "$#" -gt 0 ]; do
             usage
             exit 0
             ;;
+        --list-isa)
+            LIST_ISA=1
+            shift
+            ;;
         *)
             echo "error: unknown argument: $1"
             usage
@@ -73,6 +93,21 @@ while [ "$#" -gt 0 ]; do
             ;;
     esac
 done
+
+if [ "$LIST_ISA" -eq 1 ]; then
+    if [ ! -d "$RELEASE_BINARIES_DIR" ]; then
+        echo "error: release binaries directory not found: $RELEASE_BINARIES_DIR" >&2
+        exit 1
+    fi
+
+    if ! list_valid_isas | grep . >/dev/null 2>&1; then
+        echo "error: no release binaries found in $RELEASE_BINARIES_DIR" >&2
+        exit 1
+    fi
+
+    print_valid_isas
+    exit 0
+fi
 
 if [ -z "$WEB_SERVER" ]; then
     echo "error: --webserver is required"
@@ -83,6 +118,13 @@ fi
 if [ -z "$ISA" ]; then
     echo "error: --isa is required"
     usage
+    exit 2
+fi
+
+if ! list_valid_isas | grep -Fx "$ISA" >/dev/null 2>&1; then
+    echo "error: invalid --isa '$ISA'"
+    echo "valid values:"
+    print_valid_isas
     exit 2
 fi
 
