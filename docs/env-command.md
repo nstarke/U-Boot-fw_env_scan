@@ -8,7 +8,7 @@ Scans MTD/UBI plus block devices (SD/eMMC such as `/dev/sd*` and `/dev/mmcblk*`)
 - `--size <env_size>` — fixed environment size (for example `0x10000`)
 - `--hint <hint>` — override hint string used for positive labeling
 - `--dev <device>` — scan only one device (step inferred from sysfs/proc)
-- `--brutefoce` / `--bruteforce` — skip CRC checks and match by hint strings only
+- `--bruteforce` — skip CRC checks and match by hint strings only
 - `--skip-remove` — keep any created helper `/dev/mtdblock*`/UBI device nodes after run
 - `--skip-mtd` — skip MTD/mtdblock scan targets and helper node handling
 - `--skip-ubi` — skip UBI/ubiblock scan targets and helper node handling
