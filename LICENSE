@@ -25,3 +25,23 @@ Additional Notices
 
 The file `compat/sys/queue.h` is provided under the BSD 2-Clause license
 (SPDX-License-Identifier: BSD-2-Clause), as noted in that file header.
+
+This repository also includes git submodules under `third_party/` with their
+own licenses:
+
+- `third_party/libcsv` — GNU Lesser General Public License v2.1
+  (`third_party/libcsv/COPYING`)
+- `third_party/json-c` — MIT License (`third_party/json-c/COPYING`)
+- `third_party/curl` — curl license / ISC-style permissive license
+  (`third_party/curl/COPYING`)
+- `third_party/openssl` — Apache License 2.0
+  (`third_party/openssl/LICENSE.txt`)
+- `third_party/u-boot` — GNU General Public License v2
+  (`third_party/u-boot/COPYING`)
+- `third_party/libubootenv` — LGPL-2.1-or-later (project/library code), with
+  additional REUSE-declared licenses in `third_party/libubootenv/LICENSES/`
+  including MIT and CC0-1.0
+- `third_party/zlib` — zlib License (`third_party/zlib/LICENSE`)
+
+Please consult the referenced files within each submodule for complete and
+authoritative license terms.
