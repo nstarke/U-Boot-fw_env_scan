@@ -29,8 +29,14 @@ run_accept_case "audit --list-rules" "$BIN" audit --list-rules
 run_accept_case "audit required args: --dev --size" \
     "$BIN" audit --dev /dev/null --size 0x100
 
-run_accept_case "audit --rule" \
+run_accept_case "audit --rule uboot_validate_crc32" \
     "$BIN" audit --rule uboot_validate_crc32 --dev /dev/null --size 0x100
+
+run_accept_case "audit --rule uboot_validate_env_writeability" \
+    "$BIN" audit --rule uboot_validate_env_writeability --dev /dev/null --size 0x100
+
+run_accept_case "audit --rule uboot_validate_secureboot" \
+    "$BIN" audit --rule uboot_validate_secureboot --dev /dev/null --size 0x100
 
 run_accept_case "audit --offset" \
     "$BIN" audit --dev /dev/null --offset 0x0 --size 0x100
