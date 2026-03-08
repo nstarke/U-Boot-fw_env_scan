@@ -290,6 +290,11 @@ int fw_env_scan_main(int argc, char **argv)
 	fw_ensure_ubi_nodes(g_verbose);
 
 	if (dev_override) {
+		if (!strncmp(dev_override, "/dev/mtd", 8) && strncmp(dev_override, "/dev/mtdblock", 13)) {
+			err_printf("Refusing to scan raw MTD char device: %s (use /dev/mtdblock* instead)\n", dev_override);
+			return 2;
+		}
+
 		uint64_t step = fw_guess_erasesize_from_sysfs(dev_override);
 		if (!step)
 			step = fw_guess_erasesize_from_proc_mtd(dev_override);
@@ -311,8 +316,7 @@ int fw_env_scan_main(int argc, char **argv)
 
 	if (argi >= argc) {
 		glob_t g;
-		glob("/dev/mtd[0-9]*", 0, NULL, &g);
-		glob("/dev/mtdblock[0-9]*", GLOB_APPEND, NULL, &g);
+		glob("/dev/mtdblock[0-9]*", 0, NULL, &g);
 		glob("/dev/ubi[0-9]*_[0-9]*", GLOB_APPEND, NULL, &g);
 		glob("/dev/ubiblock[0-9]*_[0-9]*", GLOB_APPEND, NULL, &g);
 		for (size_t gi = 0; gi < g.gl_pathc; gi++) {
@@ -346,6 +350,11 @@ int fw_env_scan_main(int argc, char **argv)
 		if (!colon || colon == arg || *(colon + 1) == '\0')
 			continue;
 		*colon = '\0';
+		if (!strncmp(arg, "/dev/mtd", 8) && strncmp(arg, "/dev/mtdblock", 13)) {
+			err_printf("Refusing to scan raw MTD char device: %s (use /dev/mtdblock* instead)\n", arg);
+			*colon = ':';
+			continue;
+		}
 		uint64_t step = parse_u64(colon + 1);
 		if (fixed_size) {
 			if (scan_dev(arg, step, env_size, hint_override) < 0)

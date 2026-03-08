@@ -17,6 +17,14 @@
 #define O_CLOEXEC 0
 #endif
 
+#ifndef S_IFCHR
+#define S_IFCHR 0020000
+#endif
+
+#ifndef S_IFBLK
+#define S_IFBLK 0060000
+#endif
+
 static uint64_t read_u64_from_file(const char *path)
 {
 	char buf[64];
@@ -408,16 +416,13 @@ void fw_ensure_mtd_nodes(bool verbose)
 	while ((de = readdir(dir))) {
 		unsigned int idx;
 		char extra;
-		char devpath[64];
 		char blockpath[64];
 
 		if (sscanf(de->d_name, "mtd%u%c", &idx, &extra) != 1)
 			continue;
 
-		snprintf(devpath, sizeof(devpath), "/dev/mtd%u", idx);
 		snprintf(blockpath, sizeof(blockpath), "/dev/mtdblock%u", idx);
 
-		create_node_if_missing(devpath, S_IFCHR | 0600, makedev(90, idx * 2), verbose);
 		create_node_if_missing(blockpath, S_IFBLK | 0600, makedev(31, idx), verbose);
 	}
 
