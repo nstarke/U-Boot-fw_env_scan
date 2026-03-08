@@ -6,10 +6,12 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 SCRIPT_NAME="$(basename "$0")"
 
 WEB_SERVER=""
+OUTPUT_DIRECTORY=""
+TEMP_OUTPUT_DIRECTORY=""
 
 usage() {
-    echo "usage: $0 --webserver <url>"
-    echo "   or: $0 --webserver=<url>"
+    echo "usage: $0 --webserver <url> [--output-directory <path>]"
+    echo "   or: $0 --webserver=<url> [--output-directory=<path>]"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -25,6 +27,19 @@ while [ "$#" -gt 0 ]; do
             ;;
         --webserver=*)
             WEB_SERVER="${1#*=}"
+            shift
+            ;;
+        --output-directory)
+            if [ "$#" -lt 2 ]; then
+                echo "error: --output-directory requires a value"
+                usage
+                exit 2
+            fi
+            OUTPUT_DIRECTORY="$2"
+            shift 2
+            ;;
+        --output-directory=*)
+            OUTPUT_DIRECTORY="${1#*=}"
             shift
             ;;
         --help|-h)
@@ -69,10 +84,21 @@ fetch_to_file() {
 
 INDEX_FILE="$(mktemp /tmp/download_tests_index.XXXXXX)"
 SCRIPT_LIST_FILE="$(mktemp /tmp/download_tests_list.XXXXXX)"
+
+if [ -n "$OUTPUT_DIRECTORY" ]; then
+    mkdir -p "$OUTPUT_DIRECTORY"
+    DEST_DIR="$OUTPUT_DIRECTORY"
+else
+    TEMP_OUTPUT_DIRECTORY="$(mktemp -d /tmp/download_tests_output.XXXXXX)"
+    DEST_DIR="$TEMP_OUTPUT_DIRECTORY"
+fi
+
 cleanup() {
     rm -f "$INDEX_FILE" "$SCRIPT_LIST_FILE"
 }
 trap cleanup EXIT HUP INT TERM
+
+echo "output directory: $DEST_DIR"
 
 echo "fetching index: $BASE_URL/"
 fetch_to_file "$BASE_URL/" "$INDEX_FILE"
@@ -80,7 +106,7 @@ fetch_to_file "$BASE_URL/" "$INDEX_FILE"
 sed 's/[^A-Za-z0-9_./-]/\
 /g' "$INDEX_FILE" | \
     grep '^/*tests/.*\.sh$' | \
-    sed 's#^/*##' >"$SCRIPT_LIST_FILE"
+    sed 's#^/*##' | sort -u >"$SCRIPT_LIST_FILE"
 
 if [ ! -s "$SCRIPT_LIST_FILE" ]; then
     echo "error: no test shell scripts found in index at $BASE_URL/"
@@ -95,7 +121,7 @@ while IFS= read -r rel_path; do
     fi
 
     url="$BASE_URL/$rel_path"
-    dest="$SCRIPT_DIR/$script_file"
+    dest="$DEST_DIR/$script_file"
 
     echo "downloading $url -> $dest"
 
@@ -103,3 +129,6 @@ while IFS= read -r rel_path; do
 done <"$SCRIPT_LIST_FILE"
 
 echo "done"
+if [ -n "$TEMP_OUTPUT_DIRECTORY" ]; then
+    echo "files written to temporary directory: $TEMP_OUTPUT_DIRECTORY"
+fi
