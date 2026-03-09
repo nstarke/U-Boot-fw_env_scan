@@ -59,32 +59,42 @@ list_valid_isas_from_index_file() {
 find_release_binary_name_for_isa() {
     index_file="$1"
     isa="$2"
+    want_embedded="embedded_linux_audit-$isa"
+    want_legacy="uboot_audit-$isa"
 
     # Prefer the current binary name, but keep compatibility with older releases.
-    bin_name="$(
+    bin_name=""
+    for candidate in $(
         tr -d '\r' <"$index_file" | \
             sed 's/[^A-Za-z0-9_./-]/\
 /g' | \
             grep '^/*embedded_linux_audit-[A-Za-z0-9._-]\+$' | \
-            sed 's#^/*##' | \
-            grep -x "embedded_linux_audit-$isa" | \
-            head -n 1
-    )"
+            sed 's#^/*##'
+    ); do
+        if [ "$candidate" = "$want_embedded" ]; then
+            bin_name="$candidate"
+            break
+        fi
+    done
 
     if [ -n "$bin_name" ]; then
         echo "$bin_name"
         return 0
     fi
 
-    bin_name="$(
+    bin_name=""
+    for candidate in $(
         tr -d '\r' <"$index_file" | \
             sed 's/[^A-Za-z0-9_./-]/\
 /g' | \
             grep '^/*uboot_audit-[A-Za-z0-9._-]\+$' | \
-            sed 's#^/*##' | \
-            grep -x "uboot_audit-$isa" | \
-            head -n 1
-    )"
+            sed 's#^/*##'
+    ); do
+        if [ "$candidate" = "$want_legacy" ]; then
+            bin_name="$candidate"
+            break
+        fi
+    done
 
     if [ -n "$bin_name" ]; then
         echo "$bin_name"
