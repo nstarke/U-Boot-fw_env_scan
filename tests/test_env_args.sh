@@ -34,5 +34,28 @@ run_accept_case "env --output-http --size $TEST_SIZE" "$BIN" env --output-http h
 run_accept_case "env --output-https --size $TEST_SIZE" "$BIN" env --output-https https://127.0.0.1:1/env --size "$TEST_SIZE"
 run_accept_case "env --insecure --size $TEST_SIZE" "$BIN" env --insecure --size "$TEST_SIZE"
 
+if [ "$(id -u)" -eq 0 ]; then
+    TMP_ENV_IMAGE="$(mktemp /tmp/uboot_env_parse_vars.XXXXXX.bin)"
+    python3 - "$TMP_ENV_IMAGE" <<'PY'
+import binascii
+import struct
+import sys
+
+path = sys.argv[1]
+env_size = 0x10000
+data = bytearray(b'\x00' * (env_size - 4))
+payload = b'bootcmd=run distro_bootcmd\x00baudrate=115200\x00\x00'
+data[:len(payload)] = payload
+crc = binascii.crc32(data) & 0xFFFFFFFF
+image = struct.pack('<I', crc) + data
+
+with open(path, 'wb') as f:
+    f.write(image)
+PY
+    run_exact_case "env --parse-vars synthetic image" 0 \
+        "$BIN" --output-format txt env --parse-vars --size "$TEST_SIZE" "$TMP_ENV_IMAGE:0x10000"
+    rm -f "$TMP_ENV_IMAGE"
+fi
+
 rm -f "$REPO_ROOT/tests/.tmp_fw_env.config"
 finish_tests

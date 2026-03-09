@@ -971,62 +971,6 @@ static int apply_write_script_libuboot(const char *script_path, struct uboot_ctx
 	return 0;
 }
 
-static void dump_env_vars_libuboot(const char *dev, uint64_t off, uint64_t env_size,
-				   uint64_t erase_size, uint64_t sector_count)
-{
-	struct uboot_ctx *ctx = NULL;
-	struct uboot_env_device envdevs[2];
-	void *entry = NULL;
-	size_t count = 0;
-
-	if (!dev || !env_size)
-		return;
-
-	memset(envdevs, 0, sizeof(envdevs));
-	envdevs[0].devname = (char *)dev;
-	envdevs[0].offset = (long long)off;
-	envdevs[0].envsize = (size_t)env_size;
-	envdevs[0].sectorsize = (size_t)(erase_size ? erase_size : env_size);
-	envdevs[0].envsectors = (unsigned long)(sector_count ? sector_count : 1);
-
-	if (libuboot_initialize(&ctx, envdevs) < 0 || !ctx) {
-		emit_env_verbosef(dev, off,
-			"libubootenv: initialize failed while parsing variables at 0x%jx",
-			(uintmax_t)off);
-		return;
-	}
-
-	if (libuboot_open(ctx) < 0) {
-		emit_env_verbosef(dev, off,
-			"libubootenv: open failed while parsing variables at 0x%jx",
-			(uintmax_t)off);
-		libuboot_exit(ctx);
-		return;
-	}
-
-	out_printf("    parsed env vars:\n");
-	while ((entry = libuboot_iterator(ctx, entry)) != NULL) {
-		const char *name = libuboot_getname(entry);
-		const char *value = libuboot_getvalue(entry);
-
-		if (!name)
-			continue;
-
-		out_printf("      %s=%s\n", name, value ? value : "");
-		count++;
-		if (count >= 256) {
-			out_printf("      ... truncated after 256 vars ...\n");
-			break;
-		}
-	}
-
-	if (!count)
-		out_printf("      (no parseable variables found)\n");
-
-	libuboot_close(ctx);
-	libuboot_exit(ctx);
-}
-
 static MAYBE_UNUSED int build_env_region(const struct env_kv *kvs, size_t count, uint8_t *out, size_t out_len)
 {
 	size_t pos = 0;
@@ -1349,7 +1293,12 @@ static int scan_dev(const char *dev, uint64_t step, uint64_t env_size, const cha
 				(uintmax_t)erase_size, (uintmax_t)sector_count);
 		}
 		if (g_parse_vars) {
-			dump_env_vars_libuboot(dev, (uint64_t)off, env_size, erase_size, sector_count);
+			if (crc_ok_redund && !crc_ok_std && env_size > 5)
+				dump_env_vars(buf + 5, (size_t)env_size - 5);
+			else if (env_size > 4)
+				dump_env_vars(buf + 4, (size_t)env_size - 4);
+			else
+				out_printf("    parsed env vars:\n      (no parseable variables found)\n");
 		}
 		hits++;
 	}
