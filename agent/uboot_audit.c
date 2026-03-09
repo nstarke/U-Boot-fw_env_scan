@@ -20,13 +20,15 @@ static void usage(const char *prog)
 		"  image   Scan or extract U-Boot images (uboot_image_scan behavior)\n"
 		"  audit   Run audit rules against device data\n"
 		"  dmesg   Dump kernel ring buffer output\n"
+		"  remote-copy  Copy a local file to remote destination\n"
 		"\n"
 		"Examples:\n"
 		"  %s env --verbose\n"
 		"  %s image --dev /dev/mtdblock4 --step 0x1000\n"
 		"  %s audit --dev /dev/mtdblock4 --offset 0x0 --size 0x10000\n"
-		"  %s dmesg --verbose --output-http http://127.0.0.1:5000/dmesg\n",
-		prog, prog, prog, prog, prog);
+		"  %s dmesg --verbose --output-http http://127.0.0.1:5000/dmesg\n"
+		"  %s remote-copy /tmp/fw.bin --output-https https://127.0.0.1:5443/upload\n",
+		prog, prog, prog, prog, prog, prog);
 }
 
 int main(int argc, char **argv)
@@ -103,6 +105,13 @@ int main(int argc, char **argv)
 			fprintf(stderr,
 				"Warning: --output-format has no effect for dmesg; remote output is always text/plain\n");
 		return uboot_dmesg_scan_main(argc - cmd_idx, argv + cmd_idx);
+	}
+
+	if (!strcmp(argv[cmd_idx], "remote-copy")) {
+		if (output_format_explicit)
+			fprintf(stderr,
+				"Warning: --output-format has no effect for remote-copy; file transfer is raw bytes\n");
+		return uboot_remote_copy_scan_main(argc - cmd_idx, argv + cmd_idx);
 	}
 
 	fprintf(stderr, "Unknown subcommand: %s\n\n", argv[cmd_idx]);

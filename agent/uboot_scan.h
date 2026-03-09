@@ -56,6 +56,7 @@ int uboot_env_scan_main(int argc, char **argv);
 int uboot_image_scan_main(int argc, char **argv);
 int uboot_audit_scan_main(int argc, char **argv);
 int uboot_dmesg_scan_main(int argc, char **argv);
+int uboot_remote_copy_scan_main(int argc, char **argv);
 
 struct uboot_audit_input {
 	const char *device;

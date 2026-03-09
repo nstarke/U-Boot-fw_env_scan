@@ -31,6 +31,7 @@ bash tests/test_all.sh
 - `tests/test_image_args.sh`
 - `tests/test_audit_args.sh`
 - `tests/test_dmesg_args.sh`
+- `tests/test_remote_copy_args.sh`
 
 It returns non-zero if any test group fails.
 
@@ -41,6 +42,7 @@ sh tests/test_env_args.sh
 sh tests/test_image_args.sh
 sh tests/test_audit_args.sh
 sh tests/test_dmesg_args.sh
+sh tests/test_remote_copy_args.sh
 ```
 
 ## What each test script covers
@@ -49,6 +51,7 @@ sh tests/test_dmesg_args.sh
 - `test_image_args.sh`: validates accepted/expected behavior of `image` arguments and mode combinations.
 - `test_audit_args.sh`: validates accepted/expected behavior of `audit` arguments, output formats, and rule selections.
 - `test_dmesg_args.sh`: validates accepted/expected behavior of `dmesg` arguments and `--output-format` warning behavior.
+- `test_remote_copy_args.sh`: validates accepted/expected behavior of `remote-copy` arguments and transfer-target constraints.
 
 These are argument/CLI behavior coverage tests, not full hardware integration tests.
 

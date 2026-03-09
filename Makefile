@@ -86,7 +86,7 @@ CFLAGS += -I.
 CFLAGS += -Iagent
 
 TARGET := uboot_audit
-SRC    := agent/uboot_audit.c agent/uboot_env_scan.c agent/uboot_image_scan.c agent/uboot_audit_scan.c agent/uboot_dmesg_scan.c agent/uboot_scan.c \
+SRC    := agent/uboot_audit.c agent/uboot_env_scan.c agent/uboot_image_scan.c agent/uboot_audit_scan.c agent/uboot_dmesg_scan.c agent/uboot_remote_copy_scan.c agent/uboot_scan.c \
 	  agent/audit-rules/uboot_validate_crc32_rule.c \
 	  agent/audit-rules/uboot_validate_cmdline_init_writeability_rule.c \
 	  agent/audit-rules/uboot_validate_env_security_rule.c \
