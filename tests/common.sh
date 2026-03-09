@@ -24,6 +24,23 @@ EOF_APPEND_LINE
 }
 
 run_with_output_override() {
+    if [ "${TEST_DISABLE_OUTPUT_OVERRIDE:-0}" = "1" ]; then
+        has_verbose=0
+        for arg in "$@"; do
+            case "$arg" in
+                --verbose|--verbose=*)
+                    has_verbose=1
+                    break
+                    ;;
+            esac
+        done
+        if [ "$has_verbose" -eq 0 ]; then
+            set -- "$@" --verbose
+        fi
+        "$@"
+        return $?
+    fi
+
     override_flag=""
     override_value=""
 
@@ -72,13 +89,12 @@ run_with_output_override() {
                 set -- "$@" "$arg"
                 ;;
             --output-http|--output-https)
-                set -- "$@" "$arg"
+                set -- "$@" "$override_flag" "$override_value"
                 IFS= read -r next_arg || true
-                set -- "$@" "$next_arg"
                 replaced=1
                 ;;
             --output-http=*|--output-https=*)
-                set -- "$@" "$arg"
+                set -- "$@" "$override_flag" "$override_value"
                 replaced=1
                 ;;
             *)
@@ -134,7 +150,11 @@ run_exact_case() {
     shift 2
 
     log="$(mktemp /tmp/test_log.XXXXXX)"
-    run_with_output_override "$@" >"$log" 2>&1
+    if [ "$expected_rc" -eq 2 ]; then
+        TEST_DISABLE_OUTPUT_OVERRIDE=1 run_with_output_override "$@" >"$log" 2>&1
+    else
+        run_with_output_override "$@" >"$log" 2>&1
+    fi
     rc=$?
 
     if [ "$rc" -eq "$expected_rc" ]; then
