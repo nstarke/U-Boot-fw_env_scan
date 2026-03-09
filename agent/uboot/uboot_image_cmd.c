@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT License - Copyright (c) 2026 Nicholas Starke
 
 #include "embedded_linux_audit_cmd.h"
+#include "uboot/image/uboot_image_cmd.h"
 
 #include <errno.h>
 #include <arpa/inet.h>
@@ -285,25 +286,6 @@ static size_t align_up_4(size_t v)
 	return (v + 3U) & ~((size_t)3U);
 }
 
-static void crc32_init(void)
-{
-	const uint32_t poly = 0xEDB88320U;
-	for (uint32_t i = 0; i < 256; i++) {
-		uint32_t c = i;
-		for (int j = 0; j < 8; j++)
-			c = (c & 1U) ? (poly ^ (c >> 1)) : (c >> 1);
-		g_crc32_table[i] = c;
-	}
-}
-
-static uint32_t crc32_calc(const uint8_t *buf, size_t len)
-{
-	uint32_t c = 0xFFFFFFFFU;
-	for (size_t i = 0; i < len; i++)
-		c = g_crc32_table[(c ^ buf[i]) & 0xFFU] ^ (c >> 8);
-	return c ^ 0xFFFFFFFFU;
-}
-
 static bool str_contains_token_ci(const char *haystack, const char *needle)
 {
 	size_t needle_len;
@@ -368,7 +350,7 @@ static bool validate_uimage_header(const uint8_t *p, uint64_t abs_off, uint64_t 
 	memcpy(hdr, p, sizeof(hdr));
 	header_crc = uboot_read_be32(hdr + 4);
 	hdr[4] = hdr[5] = hdr[6] = hdr[7] = 0;
-	calc_crc = crc32_calc(hdr, sizeof(hdr));
+	calc_crc = uboot_crc32_calc(g_crc32_table, hdr, sizeof(hdr));
 	if (calc_crc != header_crc)
 		return false;
 
@@ -993,7 +975,7 @@ out:
 	return rc;
 }
 
-static uint64_t parse_u64(const char *s)
+uint64_t uboot_image_parse_u64(const char *s)
 {
 	uint64_t v;
 
@@ -1008,12 +990,10 @@ static void usage(const char *prog)
 {
 	fprintf(stderr,
 		"Usage: %s [--verbose] [--dev <device>] [--step <bytes>] [--allow-text]\n"
-		"       %s --pull --dev <device> --offset <bytes> --output-tcp <IPv4:port>\n"
-		"       %s --pull --dev <device> --offset <bytes> --output-http <http://host:port/>\n"
-		"       %s --pull --dev <device> --offset <bytes> --output-https <https://host:port/>\n"
-		"       %s --find-address --dev <device> --offset <bytes>\n"
-		"       %s --list-commands --dev <device> --offset <bytes>\n"
 		"       %s [--skip-remove] [--skip-mtd] [--skip-ubi] [--skip-sd] [--skip-emmc]\n"
+		"       %s pull --dev <device> --offset <bytes> [--output-tcp <IPv4:port> | --output-http <http://host:port/> | --output-https <https://host:port/>]\n"
+		"       %s find-address --dev <device> --offset <bytes>\n"
+		"       %s list-commands --dev <device> --offset <bytes>\n"
 		"  no args: scan /dev/mtdblock*, /dev/ubi*_*, /dev/ubiblock*_*, /dev/mmcblk* and /dev/sd* for U-Boot image signatures\n"
 		"  --verbose: print scan progress\n"
 		"  --dev: scan only a specific device\n"
@@ -1024,19 +1004,13 @@ static void usage(const char *prog)
 		"  --skip-ubi: skip UBI and ubiblock scan targets\n"
 		"  --skip-sd: skip /dev/sd* scan targets\n"
 		"  --skip-emmc: skip /dev/mmcblk* scan targets\n"
-		"  --send-logs: send tool log output to --output-tcp IPv4:port\n"
-		"  --pull: read image from --dev at --offset and stream bytes to --output-tcp\n"
-		"  --find-address: print image load address from header/FIT data\n"
-		"  --list-commands: best-effort extraction of command names from image bytes\n"
-		"  --offset: byte offset of image header for --pull\n"
-		"  --output-tcp: IPv4:TCPPort destination for --pull\n"
-		"  --output-http: HTTP URI destination for POST output\n"
-		"  --output-https: HTTPS URI destination for POST output\n"
-		"  --insecure: disable TLS certificate/hostname verification for HTTPS output\n",
-		prog, prog, prog, prog, prog, prog, prog);
+		"  pull: read image from --dev at --offset and stream bytes to a remote destination\n"
+		"  find-address: print image load address from header/FIT data\n"
+		"  list-commands: best-effort extraction of command names from image bytes\n",
+		prog, prog, prog, prog, prog);
 }
 
-static int find_image_load_address(const char *dev, uint64_t offset)
+int uboot_image_find_address_execute(const char *dev, uint64_t offset)
 {
 	uint8_t hdr[UIMAGE_HDR_SIZE];
 	uint64_t dev_size = uboot_guess_size_any(dev);
@@ -1390,16 +1364,12 @@ int uboot_image_scan_main(int argc, char **argv)
 	const char *output_http_target = NULL;
 	const char *output_https_target = NULL;
 	uint64_t step = 0x1000;
-	uint64_t pull_offset = 0;
-	bool pull_mode = false;
-	bool find_address = false;
-	bool list_commands = false;
-	bool offset_set = false;
 	bool skip_mtd = false;
 	bool skip_ubi = false;
 	bool skip_sd = false;
 	bool skip_emmc = false;
 	bool skip_remove = false;
+	bool send_logs = false;
 	bool helper_verbose = false;
 	char **created_mtdblock_nodes = NULL;
 	size_t created_mtdblock_count = 0;
@@ -1415,27 +1385,24 @@ int uboot_image_scan_main(int argc, char **argv)
 	g_verbose = false;
 	g_allow_text = false;
 	g_allow_text_pattern = "U-Boot";
-	g_send_logs = false;
-	g_insecure = false;
-	g_csv_header_emitted = false;
-	if (g_log_sock >= 0) {
-		close(g_log_sock);
-		g_log_sock = -1;
+	if (argc > 1) {
+		if (!strcmp(argv[1], "pull"))
+			return uboot_image_pull_main(argc - 1, argv + 1);
+		if (!strcmp(argv[1], "find-address"))
+			return uboot_image_find_address_main(argc - 1, argv + 1);
+		if (!strcmp(argv[1], "list-commands"))
+			return uboot_image_list_commands_main(argc - 1, argv + 1);
 	}
 
 	static const struct option long_opts[] = {
 		{ "verbose", no_argument, NULL, 'v' },
 		{ "dev", required_argument, NULL, 'd' },
 		{ "step", required_argument, NULL, 's' },
-		{ "offset", required_argument, NULL, 'o' },
-		{ "output-tcp", required_argument, NULL, 'p' },
+		{ "send-logs", no_argument, NULL, 'L' },
+		{ "output-tcp", required_argument, NULL, 'o' },
 		{ "output-http", required_argument, NULL, 'O' },
 		{ "output-https", required_argument, NULL, 'T' },
 		{ "insecure", no_argument, NULL, 'k' },
-		{ "pull", no_argument, NULL, 'P' },
-		{ "find-address", no_argument, NULL, 'a' },
-		{ "list-commands", no_argument, NULL, 'C' },
-		{ "send-logs", no_argument, NULL, 'L' },
 		{ "allow-text", optional_argument, NULL, 't' },
 		{ "skip-remove", no_argument, NULL, 'R' },
 		{ "skip-mtd", no_argument, NULL, 'M' },
@@ -1446,7 +1413,7 @@ int uboot_image_scan_main(int argc, char **argv)
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "hvd:s:o:p:O:T:kPt::aCLRMUSE", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hvd:s:o:O:T:kt::LRMUSE", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
@@ -1458,15 +1425,14 @@ int uboot_image_scan_main(int argc, char **argv)
 			dev_override = optarg;
 			break;
 		case 's':
-			step = parse_u64(optarg);
+			step = uboot_image_parse_u64(optarg);
 			if (!step)
 				step = 0x1000;
 			break;
-		case 'o':
-			pull_offset = parse_u64(optarg);
-			offset_set = true;
+		case 'L':
+			send_logs = true;
 			break;
-		case 'p':
+		case 'o':
 			output_tcp_target = optarg;
 			break;
 		case 'O':
@@ -1477,18 +1443,6 @@ int uboot_image_scan_main(int argc, char **argv)
 			break;
 		case 'k':
 			g_insecure = true;
-			break;
-		case 'P':
-			pull_mode = true;
-			break;
-		case 'a':
-			find_address = true;
-			break;
-		case 'C':
-			list_commands = true;
-			break;
-		case 'L':
-			g_send_logs = true;
 			break;
 		case 't':
 			g_allow_text = true;
@@ -1521,18 +1475,7 @@ int uboot_image_scan_main(int argc, char **argv)
 	}
 
 	helper_verbose = (g_output_format == FW_OUTPUT_TXT) && g_verbose;
-
-	crc32_init();
-
-	if (geteuid() != 0) {
-		err_printf("This program must be run as root.\n");
-		return 1;
-	}
-
-	if (g_send_logs && !output_tcp_target) {
-		err_printf("--send-logs requires --output-tcp\n");
-		return 2;
-	}
+	g_send_logs = send_logs;
 
 	if (output_http_target && strncmp(output_http_target, "http://", 7)) {
 		err_printf("Invalid --output-http URI (expected http://host:port/...): %s\n", output_http_target);
@@ -1549,13 +1492,10 @@ int uboot_image_scan_main(int argc, char **argv)
 		return 2;
 	}
 
-	if (output_http_target)
-		g_output_http_uri = output_http_target;
-	if (output_https_target)
-		g_output_http_uri = output_https_target;
+	g_output_http_uri = output_http_target ? output_http_target : output_https_target;
 
-	if (g_send_logs && pull_mode) {
-		err_printf("--send-logs cannot be combined with --pull\n");
+	if (g_send_logs && !output_tcp_target) {
+		err_printf("--send-logs requires --output-tcp\n");
 		return 2;
 	}
 
@@ -1563,64 +1503,15 @@ int uboot_image_scan_main(int argc, char **argv)
 		g_log_sock = uboot_connect_tcp_ipv4(output_tcp_target);
 		if (g_log_sock < 0) {
 			err_printf("Unable to connect to log output target %s\n", output_tcp_target);
-			return 2;
+			return 1;
 		}
 	}
 
-	if (pull_mode) {
-		if (!dev_override || !offset_set || (!output_tcp_target && !g_output_http_uri)) {
-			err_printf("--pull requires --dev, --offset, and either --output-tcp, --output-http, or --output-https\n");
-			total_hits = -1;
-			goto out;
-		}
-		if (output_tcp_target && g_output_http_uri) {
-			err_printf("--pull accepts only one of --output-tcp, --output-http, or --output-https\n");
-			total_hits = -1;
-			goto out;
-		}
-		if (find_address || list_commands) {
-			err_printf("--pull cannot be combined with --find-address or --list-commands\n");
-			total_hits = -1;
-			goto out;
-		}
-		if (g_output_http_uri)
-			total_hits = (pull_image_to_output_http(dev_override, pull_offset, g_output_http_uri) == 0) ? 1 : -1;
-		else
-			total_hits = (pull_image_to_output_tcp(dev_override, pull_offset, output_tcp_target) == 0) ? 1 : -1;
-		goto out;
-	}
+	uboot_crc32_init(g_crc32_table);
 
-	if (find_address) {
-		if (!dev_override || !offset_set) {
-			err_printf("--find-address requires --dev and --offset\n");
-			total_hits = -1;
-			goto out;
-		}
-		if (output_tcp_target && !g_send_logs) {
-			err_printf("--find-address cannot be combined with --output-tcp (unless --send-logs is set)\n");
-			total_hits = -1;
-			goto out;
-		}
-		if (list_commands) {
-			err_printf("--find-address cannot be combined with --list-commands\n");
-			total_hits = -1;
-			goto out;
-		}
-		total_hits = (find_image_load_address(dev_override, pull_offset) == 0) ? 1 : -1;
-		goto out;
-	}
-
-	if (list_commands) {
-		if (!dev_override || !offset_set) {
-			err_printf("--list-commands requires --dev and --offset\n");
-			return 2;
-		}
-		if (output_tcp_target && !g_send_logs) {
-			err_printf("--list-commands cannot be combined with --output-tcp (unless --send-logs is set)\n");
-			return 2;
-		}
-		total_hits = (list_image_commands(dev_override, pull_offset) == 0) ? 1 : -1;
-		goto out;
+	if (geteuid() != 0) {
+		err_printf("This program must be run as root.\n");
+		return 1;
 	}
 
 	if (!skip_mtd)
@@ -1693,12 +1584,12 @@ out:
 	uboot_free_created_nodes(created_ubi_nodes, created_ubi_count);
 	uboot_free_created_nodes(created_block_nodes, created_block_count);
 
-	if (g_log_sock >= 0)
+	if (g_log_sock >= 0) {
 		close(g_log_sock);
-
+		g_log_sock = -1;
+	}
 	if (flush_output_http_buffer() < 0)
 		total_hits = -1;
-
 	free(g_output_http_buf);
 	g_output_http_buf = NULL;
 	g_output_http_len = 0;
@@ -1706,4 +1597,98 @@ out:
 	g_output_http_uri = NULL;
 
 	return (total_hits < 0) ? 1 : 0;
+}
+
+int uboot_image_prepare(bool verbose,
+			bool insecure,
+			bool send_logs,
+			const char *output_tcp_target,
+			const char *output_http_target,
+			const char *output_https_target)
+{
+	detect_output_format();
+	g_verbose = verbose;
+	g_allow_text = false;
+	g_allow_text_pattern = "U-Boot";
+	g_send_logs = send_logs;
+	g_insecure = insecure;
+	g_csv_header_emitted = false;
+	g_output_http_uri = NULL;
+	if (g_log_sock >= 0) {
+		close(g_log_sock);
+		g_log_sock = -1;
+	}
+
+	if (output_http_target && strncmp(output_http_target, "http://", 7)) {
+		err_printf("Invalid --output-http URI (expected http://host:port/...): %s\n", output_http_target);
+		return 2;
+	}
+
+	if (output_https_target && strncmp(output_https_target, "https://", 8)) {
+		err_printf("Invalid --output-https URI (expected https://host:port/...): %s\n", output_https_target);
+		return 2;
+	}
+
+	if (output_http_target && output_https_target) {
+		err_printf("Use only one of --output-http or --output-https\n");
+		return 2;
+	}
+
+	if (output_http_target)
+		g_output_http_uri = output_http_target;
+	if (output_https_target)
+		g_output_http_uri = output_https_target;
+
+	if (g_send_logs && !output_tcp_target) {
+		err_printf("--send-logs requires --output-tcp\n");
+		return 2;
+	}
+
+	if (g_send_logs) {
+		g_log_sock = uboot_connect_tcp_ipv4(output_tcp_target);
+		if (g_log_sock < 0) {
+			err_printf("Unable to connect to log output target %s\n", output_tcp_target);
+			return 2;
+		}
+	}
+
+	uboot_crc32_init(g_crc32_table);
+	return 0;
+}
+
+int uboot_image_finish(int rc)
+{
+	int ret = rc;
+
+	if (g_log_sock >= 0) {
+		close(g_log_sock);
+		g_log_sock = -1;
+	}
+
+	if (flush_output_http_buffer() < 0)
+		ret = 1;
+
+	free(g_output_http_buf);
+	g_output_http_buf = NULL;
+	g_output_http_len = 0;
+	g_output_http_cap = 0;
+	g_output_http_uri = NULL;
+
+	return ret;
+}
+
+int uboot_image_pull_execute(const char *dev,
+			     uint64_t offset,
+			     const char *output_tcp_target,
+			     const char *output_http_uri)
+{
+	if (output_http_uri)
+		return pull_image_to_output_http(dev, offset, output_http_uri);
+
+	return pull_image_to_output_tcp(dev, offset, output_tcp_target);
+}
+
+int uboot_image_list_commands_execute(const char *dev, uint64_t offset)
+{
+	return list_image_commands(dev, offset);
 }
