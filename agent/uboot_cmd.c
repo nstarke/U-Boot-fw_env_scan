@@ -1,4 +1,4 @@
-#include "uboot_scan.h"
+#include "uboot_cmd.h"
 
 #include <arpa/inet.h>
 #include <dirent.h>

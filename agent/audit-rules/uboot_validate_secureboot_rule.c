@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT License - Copyright (c) 2026 Nicholas Starke
 
-#include "uboot_scan.h"
+#include "uboot_cmd.h"
 
 #include <ctype.h>
 #include <errno.h>
