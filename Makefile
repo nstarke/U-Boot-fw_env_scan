@@ -41,15 +41,15 @@ COMPAT_CFLAGS += -march=mips64r2 -mabi=n32
 else ifeq ($(COMPAT_CPU),mips64eln32)
 COMPAT_CFLAGS += -march=mips64r2 -mabi=n32
 else ifeq ($(COMPAT_CPU),powerpc)
-COMPAT_CFLAGS += -mcpu=powerpc -mno-altivec
+COMPAT_CFLAGS += -mcpu=ppc -mno-altivec
 else ifeq ($(COMPAT_CPU),powerpchf)
-COMPAT_CFLAGS += -mcpu=powerpc -mhard-float -mno-altivec
+COMPAT_CFLAGS += -mcpu=ppc -mhard-float -mno-altivec
 else ifeq ($(COMPAT_CPU),powerpc64)
 COMPAT_CFLAGS += -mcpu=ppc64 -mno-altivec
 else ifeq ($(COMPAT_CPU),powerpc64le)
 COMPAT_CFLAGS += -mcpu=ppc64 -mno-altivec
 else ifeq ($(COMPAT_CPU),riscv32)
-COMPAT_CFLAGS += -mcpu=baseline_rv32 -mabi=ilp32
+COMPAT_CFLAGS += -mcpu=baseline_rv32
 else ifeq ($(COMPAT_CPU),riscv64)
 COMPAT_CFLAGS += -mcpu=baseline_rv64 -mabi=lp64d
 else ifeq ($(COMPAT_CPU),s390x)
@@ -76,6 +76,9 @@ CC_TAG := $(subst $(space),_,$(CC))-$(compat_tag)
 CMAKE_C_COMPILER ?= $(CC)
 CMAKE_C_COMPILER_ARG1 ?=
 CMAKE_C_COMPILER_TARGET ?=
+# Avoid CMake executable try-compile link checks for cross targets that may fail
+# during compiler probing (e.g. Zig + older CPU compatibility profiles).
+CMAKE_TRY_COMPILE_TARGET_TYPE ?= STATIC_LIBRARY
 
 OPENSSL_TARGET_TRIPLE ?= $(strip $(CMAKE_C_COMPILER_TARGET))
 OPENSSL_CONFIGURE_TARGET ?=
@@ -105,6 +108,7 @@ CMAKE_CC_ARGS += -DCMAKE_C_COMPILER_ARG1=$(CMAKE_C_COMPILER_ARG1)
 endif
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 CMAKE_CC_ARGS += -DCMAKE_C_COMPILER_TARGET=$(CMAKE_C_COMPILER_TARGET)
+ CMAKE_CC_ARGS += -DCMAKE_TRY_COMPILE_TARGET_TYPE=$(CMAKE_TRY_COMPILE_TARGET_TYPE)
 endif
 ifneq ($(strip $(COMPAT_CFLAGS)),)
 CMAKE_CC_ARGS += -DCMAKE_C_FLAGS="$(COMPAT_CFLAGS)"
