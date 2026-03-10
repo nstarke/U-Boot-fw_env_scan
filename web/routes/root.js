@@ -3,6 +3,26 @@ const { listBinaryEntries } = require('./shared');
 module.exports = function registerRootRoute(app, deps) {
   const { testsDir, fsp, verboseRequestLog, verboseResponseLog } = deps;
 
+  async function listTestEntries(dir, prefix = '') {
+    const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+    const nested = await Promise.all(entries.map(async (entry) => {
+      const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const fullPath = deps.path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        return listTestEntries(fullPath, relPath);
+      }
+      if (entry.isFile() && entry.name.endsWith('.sh')) {
+        return [{
+          name: relPath,
+          url: `/tests/${encodeURIComponent(relPath).replace(/%2F/g, '/')}`
+        }];
+      }
+      return [];
+    }));
+
+    return nested.flat().sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   function escapeHtml(value) {
     return String(value)
       .replace(/&/g, '&amp;')
@@ -15,13 +35,7 @@ module.exports = function registerRootRoute(app, deps) {
   app.get('/', async (req, res) => {
     verboseRequestLog(req);
     const binaryEntries = await listBinaryEntries(deps.assetsDir, fsp, deps.releaseStateFile);
-    const testEntries = (await fsp.readdir(testsDir).catch(() => []))
-      .filter((name) => name.endsWith('.sh'))
-      .sort((a, b) => a.localeCompare(b))
-      .map((name) => ({
-        name,
-        url: `/tests/${encodeURIComponent(name)}`
-      }));
+    const testEntries = await listTestEntries(testsDir);
 
     const assetItems = binaryEntries.length
       ? binaryEntries.map(({ fileName, url }) => `      <li><a href="${escapeHtml(url)}">${escapeHtml(fileName)}</a></li>`).join('\n')

@@ -33,7 +33,25 @@ function isSafeSinglePathSegment(value) {
   return true;
 }
 
+function isSafeRelativePath(value) {
+  if (typeof value !== 'string' || !value) {
+    return false;
+  }
+
+  if (value.includes('\\')) {
+    return false;
+  }
+
+  const normalized = value.split('/');
+  if (normalized.some((segment) => !isSafeSinglePathSegment(segment))) {
+    return false;
+  }
+
+  return true;
+}
+
 module.exports = {
   listBinaryEntries,
-  isSafeSinglePathSegment
+  isSafeSinglePathSegment,
+  isSafeRelativePath
 };

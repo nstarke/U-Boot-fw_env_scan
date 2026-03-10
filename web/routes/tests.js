@@ -1,16 +1,17 @@
-const { isSafeSinglePathSegment } = require('./shared');
+const { isSafeRelativePath } = require('./shared');
 
 module.exports = function registerTestsRoute(app, deps) {
   const { testsDir, fsp, isWithinRoot, verboseRequestLog, verboseResponseLog } = deps;
 
-  app.get('/tests/:name', async (req, res) => {
+  app.get('/tests/*', async (req, res) => {
     verboseRequestLog(req);
-    if (!isSafeSinglePathSegment(req.params.name)) {
+    const requestedPath = req.params[0];
+    if (!isSafeRelativePath(requestedPath)) {
       res.status(400).type('text').send('invalid path\n');
       verboseResponseLog(req, 400, 13);
       return;
     }
-    const candidate = deps.path.resolve(testsDir, req.params.name);
+    const candidate = deps.path.resolve(testsDir, requestedPath);
     if (!isWithinRoot(candidate, testsDir)) {
       res.status(404).type('text').send('not found\n');
       verboseResponseLog(req, 404, 10);
