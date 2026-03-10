@@ -65,16 +65,28 @@ TMP_TOP_SUID_FILE="$TMP_DIR/top-suid.sh"
 TMP_TOP_600_FILE="$TMP_DIR/top-600.txt"
 TMP_FILE="$TMP_SUBDIR/sample.txt"
 TMP_SUID_FILE="$TMP_SUBDIR/suid-sample.sh"
-CURRENT_USER="$(id -un)"
-CURRENT_GROUP="$(id -gn)"
+CURRENT_USER="$(current_user_name)"
+CURRENT_GROUP="$(current_group_name)"
 mkdir -p "$TMP_SUBDIR"
-printf 'top\n' >"$TMP_TOP_FILE"
-printf '#!/bin/sh\nexit 0\n' >"$TMP_TOP_SUID_FILE"
+cat >"$TMP_TOP_FILE" <<'EOF_TOP'
+top
+EOF_TOP
+cat >"$TMP_TOP_SUID_FILE" <<'EOF_TOP_SUID'
+#!/bin/sh
+exit 0
+EOF_TOP_SUID
 chmod 4755 "$TMP_TOP_SUID_FILE"
-printf 'private\n' >"$TMP_TOP_600_FILE"
+cat >"$TMP_TOP_600_FILE" <<'EOF_TOP_600'
+private
+EOF_TOP_600
 chmod 0600 "$TMP_TOP_600_FILE"
-printf 'sample\n' >"$TMP_FILE"
-printf '#!/bin/sh\nexit 0\n' >"$TMP_SUID_FILE"
+cat >"$TMP_FILE" <<'EOF_SAMPLE'
+sample
+EOF_SAMPLE
+cat >"$TMP_SUID_FILE" <<'EOF_SUID'
+#!/bin/sh
+exit 0
+EOF_SUID
 chmod 4755 "$TMP_SUID_FILE"
 
 run_exact_case "linux list-files --help" 0 "$BIN" --verbose linux list-files --help
@@ -108,7 +120,7 @@ run_accept_case "linux list-files with --output-format json" "$BIN" --output-for
 local_log="$(mktemp /tmp/test_list_files_local.XXXXXX)"
 "$BIN" --verbose linux list-files "$TMP_DIR" >"$local_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_TOP_FILE" "$local_log" && ! grep -Fxq "$TMP_FILE" "$local_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$local_log" && ! file_has_exact_line "$TMP_FILE" "$local_log"; then
     echo "[PASS] linux list-files default listing stays non-recursive"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -121,7 +133,7 @@ rm -f "$local_log"
 recursive_log="$(mktemp /tmp/test_list_files_recursive.XXXXXX)"
 "$BIN" --verbose linux list-files "$TMP_DIR" --recursive >"$recursive_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_TOP_FILE" "$recursive_log" && grep -Fxq "$TMP_FILE" "$recursive_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$recursive_log" && file_has_exact_line "$TMP_FILE" "$recursive_log"; then
     echo "[PASS] linux list-files --recursive includes nested files"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -134,7 +146,7 @@ rm -f "$recursive_log"
 suid_log="$(mktemp /tmp/test_list_files_suid.XXXXXX)"
 "$BIN" --verbose linux list-files "$TMP_DIR" --suid-only >"$suid_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_TOP_SUID_FILE" "$suid_log" && ! grep -Fxq "$TMP_SUID_FILE" "$suid_log" && ! grep -Fxq "$TMP_FILE" "$suid_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_SUID_FILE" "$suid_log" && ! file_has_exact_line "$TMP_SUID_FILE" "$suid_log" && ! file_has_exact_line "$TMP_FILE" "$suid_log"; then
     echo "[PASS] linux list-files --suid-only filters non-SUID files"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -147,7 +159,7 @@ rm -f "$suid_log"
 recursive_suid_log="$(mktemp /tmp/test_list_files_recursive_suid.XXXXXX)"
 "$BIN" --verbose linux list-files "$TMP_DIR" --recursive --suid-only >"$recursive_suid_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_TOP_SUID_FILE" "$recursive_suid_log" && grep -Fxq "$TMP_SUID_FILE" "$recursive_suid_log" && ! grep -Fxq "$TMP_FILE" "$recursive_suid_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_SUID_FILE" "$recursive_suid_log" && file_has_exact_line "$TMP_SUID_FILE" "$recursive_suid_log" && ! file_has_exact_line "$TMP_FILE" "$recursive_suid_log"; then
     echo "[PASS] linux list-files --recursive --suid-only includes nested SUID files only"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -160,7 +172,7 @@ rm -f "$recursive_suid_log"
 perm_octal_log="$(mktemp /tmp/test_list_files_perm_octal.XXXXXX)"
 "$BIN" --verbose linux list-files "$TMP_DIR" --permissions 0600 >"$perm_octal_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_TOP_600_FILE" "$perm_octal_log" && ! grep -Fxq "$TMP_TOP_FILE" "$perm_octal_log" && ! grep -Fxq "$TMP_TOP_SUID_FILE" "$perm_octal_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_600_FILE" "$perm_octal_log" && ! file_has_exact_line "$TMP_TOP_FILE" "$perm_octal_log" && ! file_has_exact_line "$TMP_TOP_SUID_FILE" "$perm_octal_log"; then
     echo "[PASS] linux list-files --permissions octal filters exact mode"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -173,7 +185,7 @@ rm -f "$perm_octal_log"
 perm_symbolic_log="$(mktemp /tmp/test_list_files_perm_symbolic.XXXXXX)"
 "$BIN" --verbose linux list-files "$TMP_DIR" --permissions u+rw,go-rwx >"$perm_symbolic_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_TOP_600_FILE" "$perm_symbolic_log" && ! grep -Fxq "$TMP_TOP_FILE" "$perm_symbolic_log" && ! grep -Fxq "$TMP_TOP_SUID_FILE" "$perm_symbolic_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_600_FILE" "$perm_symbolic_log" && ! file_has_exact_line "$TMP_TOP_FILE" "$perm_symbolic_log" && ! file_has_exact_line "$TMP_TOP_SUID_FILE" "$perm_symbolic_log"; then
     echo "[PASS] linux list-files --permissions symbolic filters matching permissions"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -186,7 +198,7 @@ rm -f "$perm_symbolic_log"
 user_log="$(mktemp /tmp/test_list_files_user.XXXXXX)"
 "$BIN" --verbose linux list-files "$TMP_DIR" --user "$CURRENT_USER" >"$user_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_TOP_FILE" "$user_log" && grep -Fxq "$TMP_TOP_SUID_FILE" "$user_log" && grep -Fxq "$TMP_TOP_600_FILE" "$user_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$user_log" && file_has_exact_line "$TMP_TOP_SUID_FILE" "$user_log" && file_has_exact_line "$TMP_TOP_600_FILE" "$user_log"; then
     echo "[PASS] linux list-files --user filters by owner"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -199,7 +211,7 @@ rm -f "$user_log"
 group_log="$(mktemp /tmp/test_list_files_group.XXXXXX)"
 "$BIN" --verbose linux list-files "$TMP_DIR" --group "$CURRENT_GROUP" >"$group_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_TOP_FILE" "$group_log" && grep -Fxq "$TMP_TOP_SUID_FILE" "$group_log" && grep -Fxq "$TMP_TOP_600_FILE" "$group_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$group_log" && file_has_exact_line "$TMP_TOP_SUID_FILE" "$group_log" && file_has_exact_line "$TMP_TOP_600_FILE" "$group_log"; then
     echo "[PASS] linux list-files --group filters by group"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else

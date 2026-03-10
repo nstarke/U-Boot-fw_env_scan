@@ -77,12 +77,12 @@ run_accept_case "uboot env --output-http --size $TEST_SIZE" "$BIN" uboot env --o
 run_accept_case "uboot env --output-https --size $TEST_SIZE" "$BIN" uboot env --output-https https://127.0.0.1:1/env --size "$TEST_SIZE"
 run_accept_case "uboot env --insecure --size $TEST_SIZE" "$BIN" uboot env --insecure --size "$TEST_SIZE"
 
-if [ "$(id -u)" -ne 0 ]; then
+if [ "$(current_uid)" -ne 0 ]; then
     run_accept_case "uboot env write-vars https URL (accepted before root check)" \
         "$BIN" uboot env write-vars https://127.0.0.1/fw_setenv_script.txt
 fi
 
-if [ "$(id -u)" -eq 0 ]; then
+if [ "$(current_uid)" -eq 0 ]; then
     TMP_ENV_IMAGE="$(mktemp /tmp/uboot_env_parse_vars.XXXXXX.bin)"
     python3 - "$TMP_ENV_IMAGE" <<'PY'
 import binascii

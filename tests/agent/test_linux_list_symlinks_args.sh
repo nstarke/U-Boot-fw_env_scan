@@ -20,7 +20,9 @@ TMP_FILE="$TMP_DIR/plain.txt"
 TMP_LINK_TOP="$TMP_DIR/top-link"
 TMP_LINK_SUB="$TMP_SUBDIR/nested-link"
 mkdir -p "$TMP_SUBDIR"
-printf 'plain\n' >"$TMP_FILE"
+cat >"$TMP_FILE" <<'EOF_PLAIN'
+plain
+EOF_PLAIN
 ln -s /tmp/target-top "$TMP_LINK_TOP"
 ln -s ../plain.txt "$TMP_LINK_SUB"
 
@@ -45,7 +47,7 @@ run_exact_case "linux list-symlinks with --output-format json" 0 "$BIN" --output
 txt_log="$(mktemp /tmp/test_list_symlinks_txt.XXXXXX)"
 "$BIN" --output-format txt --verbose linux list-symlinks "$TMP_DIR" >"$txt_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_LINK_TOP -> /tmp/target-top" "$txt_log" && ! grep -Fqx "$TMP_LINK_SUB -> ../plain.txt" "$txt_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_LINK_TOP -> /tmp/target-top" "$txt_log" && ! file_has_exact_line "$TMP_LINK_SUB -> ../plain.txt" "$txt_log"; then
     echo "[PASS] linux list-symlinks default listing stays non-recursive"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -58,7 +60,7 @@ rm -f "$txt_log"
 recursive_log="$(mktemp /tmp/test_list_symlinks_recursive.XXXXXX)"
 "$BIN" --output-format txt --verbose linux list-symlinks "$TMP_DIR" --recursive >"$recursive_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "$TMP_LINK_TOP -> /tmp/target-top" "$recursive_log" && grep -Fxq "$TMP_LINK_SUB -> ../plain.txt" "$recursive_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_LINK_TOP -> /tmp/target-top" "$recursive_log" && file_has_exact_line "$TMP_LINK_SUB -> ../plain.txt" "$recursive_log"; then
     echo "[PASS] linux list-symlinks --recursive includes nested symlinks"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -71,7 +73,7 @@ rm -f "$recursive_log"
 csv_log="$(mktemp /tmp/test_list_symlinks_csv.XXXXXX)"
 "$BIN" --output-format csv --verbose linux list-symlinks "$TMP_DIR" >"$csv_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "\"$TMP_LINK_TOP\",\"/tmp/target-top\"" "$csv_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "\"$TMP_LINK_TOP\",\"/tmp/target-top\"" "$csv_log"; then
     echo "[PASS] linux list-symlinks csv output matches expected format"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else
@@ -84,7 +86,7 @@ rm -f "$csv_log"
 json_log="$(mktemp /tmp/test_list_symlinks_json.XXXXXX)"
 "$BIN" --output-format json --verbose linux list-symlinks "$TMP_DIR" >"$json_log" 2>&1
 rc=$?
-if [ "$rc" -eq 0 ] && grep -Fxq "{\"link_path\":\"$TMP_LINK_TOP\",\"location_path\":\"/tmp/target-top\"}" "$json_log"; then
+if [ "$rc" -eq 0 ] && file_has_exact_line "{\"link_path\":\"$TMP_LINK_TOP\",\"location_path\":\"/tmp/target-top\"}" "$json_log"; then
     echo "[PASS] linux list-symlinks json output matches expected format"
     PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
 else

@@ -9,7 +9,102 @@ FAIL_COUNT=0
 TEST_SIZE=0x10000
 
 has_printf() {
-    command -v printf >/dev/null 2>&1
+    command_exists printf
+}
+
+command_exists() {
+    cmd_name="$1"
+
+    if command -v "$cmd_name" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if type "$cmd_name" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if which "$cmd_name" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    for candidate in /bin/"$cmd_name" /usr/bin/"$cmd_name" /sbin/"$cmd_name" /usr/sbin/"$cmd_name"; do
+        if [ -x "$candidate" ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+current_uid() {
+    if command_exists id; then
+        id -u
+        return $?
+    fi
+
+    if [ -r /proc/self/status ]; then
+        awk '/^Uid:/ { print $2; exit }' /proc/self/status
+        return $?
+    fi
+
+    echo 1
+}
+
+current_user_name() {
+    if command_exists id; then
+        id -un
+        return $?
+    fi
+
+    if [ -n "${USER:-}" ]; then
+        echo "$USER"
+        return 0
+    fi
+
+    if [ -r /proc/self/status ] && [ -r /etc/passwd ]; then
+        uid="$(awk '/^Uid:/ { print $2; exit }' /proc/self/status 2>/dev/null)"
+        if [ -n "$uid" ]; then
+            awk -F: -v uid="$uid" '$3 == uid { print $1; exit }' /etc/passwd
+            return $?
+        fi
+    fi
+
+    echo root
+}
+
+current_group_name() {
+    if command_exists id; then
+        id -gn
+        return $?
+    fi
+
+    if [ -n "${GROUP:-}" ]; then
+        echo "$GROUP"
+        return 0
+    fi
+
+    if [ -r /proc/self/status ] && [ -r /etc/group ]; then
+        gid="$(awk '/^Gid:/ { print $2; exit }' /proc/self/status 2>/dev/null)"
+        if [ -n "$gid" ]; then
+            awk -F: -v gid="$gid" '$3 == gid { print $1; exit }' /etc/group
+            return $?
+        fi
+    fi
+
+    echo root
+}
+
+file_has_exact_line() {
+    needle="$1"
+    file="$2"
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$line" = "$needle" ]; then
+            return 0
+        fi
+    done <"$file"
+
+    return 1
 }
 
 append_line() {
