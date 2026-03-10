@@ -29,6 +29,10 @@ const VALID_CONTENT_TYPES = {
   'application/octet-stream': 'application_octet_stream'
 };
 
+function isValidMacAddress(value) {
+  return /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(String(value || ''));
+}
+
 function normalizeContentType(contentTypeHeader = '') {
   return contentTypeHeader.split(';', 1)[0].trim().toLowerCase();
 }
@@ -439,6 +443,7 @@ function createApp({ logPrefix, assetsDir, dataDir, testsDir, binaryOutDir, verb
     writeUploadFile,
     augmentJsonPayload,
     logPathForContentType,
+    isValidMacAddress,
     isWithinRoot,
     getClientIp,
     verboseRequestLog: () => {},
@@ -486,13 +491,6 @@ async function main() {
   await Promise.all([
     fsp.mkdir(path.join(WEB_ROOT, 'data'), { recursive: true }),
     fsp.mkdir(dataDir, { recursive: true }),
-    fsp.mkdir(path.join(dataDir, 'env'), { recursive: true }),
-    fsp.mkdir(path.join(dataDir, 'logs'), { recursive: true }),
-    fsp.mkdir(path.join(dataDir, 'dmesg'), { recursive: true }),
-    fsp.mkdir(path.join(dataDir, 'orom'), { recursive: true }),
-    fsp.mkdir(path.join(dataDir, 'uboot', 'image'), { recursive: true }),
-    fsp.mkdir(path.join(dataDir, 'uboot', 'env'), { recursive: true }),
-    fsp.mkdir(path.join(dataDir, 'fs'), { recursive: true }),
     fsp.mkdir(defaultAssetsDir, { recursive: true })
   ]);
 

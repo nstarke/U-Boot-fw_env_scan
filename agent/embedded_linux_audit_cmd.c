@@ -4,15 +4,23 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <curl/curl.h>
+
+#ifdef __linux__
+#include <linux/if_arp.h>
+#endif
 
 #ifndef O_CLOEXEC
 #define O_CLOEXEC 0
@@ -214,16 +222,204 @@ char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_po
 	return out;
 }
 
+static int parse_http_uri_host(const char *uri, char *host_buf, size_t host_buf_len)
+{
+	const char *scheme_end;
+	const char *authority;
+	const char *authority_end;
+	const char *host_start;
+	const char *host_end;
+	const char *at;
+	size_t host_len;
+
+	if (!uri || !*uri || !host_buf || host_buf_len < 2)
+		return -1;
+
+	scheme_end = strstr(uri, "://");
+	if (!scheme_end)
+		return -1;
+
+	authority = scheme_end + 3;
+	authority_end = authority;
+	while (*authority_end && *authority_end != '/' && *authority_end != '?' && *authority_end != '#')
+		authority_end++;
+
+	at = memchr(authority, '@', (size_t)(authority_end - authority));
+	host_start = at ? (at + 1) : authority;
+	if (host_start >= authority_end)
+		return -1;
+
+	if (*host_start == '[') {
+		host_start++;
+		host_end = memchr(host_start, ']', (size_t)(authority_end - host_start));
+		if (!host_end)
+			return -1;
+	} else {
+		host_end = host_start;
+		while (host_end < authority_end && *host_end != ':')
+			host_end++;
+	}
+
+	host_len = (size_t)(host_end - host_start);
+	if (host_len == 0 || host_len >= host_buf_len)
+		return -1;
+
+	memcpy(host_buf, host_start, host_len);
+	host_buf[host_len] = '\0';
+	return 0;
+}
+
+static int resolve_uri_ipv4(const char *base_uri, struct in_addr *addr_out)
+{
+	char host[256];
+	struct addrinfo hints;
+	struct addrinfo *res = NULL;
+	int rc;
+
+	if (!addr_out)
+		return -1;
+	if (parse_http_uri_host(base_uri, host, sizeof(host)) < 0)
+		return -1;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+
+	rc = getaddrinfo(host, NULL, &hints, &res);
+	if (rc != 0 || !res)
+		return -1;
+
+	*addr_out = ((struct sockaddr_in *)res->ai_addr)->sin_addr;
+	freeaddrinfo(res);
+	return 0;
+}
+
+static int route_iface_for_ipv4(struct in_addr dest_addr, char *ifname_buf, size_t ifname_buf_len)
+{
+	FILE *fp;
+	char line[512];
+	uint32_t best_mask = 0;
+	bool found = false;
+
+	if (!ifname_buf || ifname_buf_len < IF_NAMESIZE)
+		return -1;
+
+	fp = fopen("/proc/net/route", "r");
+	if (!fp)
+		return -1;
+
+	if (!fgets(line, sizeof(line), fp)) {
+		fclose(fp);
+		return -1;
+	}
+
+	while (fgets(line, sizeof(line), fp)) {
+		char iface[IF_NAMESIZE];
+		unsigned long destination;
+		unsigned long gateway;
+		unsigned long flags;
+		unsigned long refcnt;
+		unsigned long use;
+		unsigned long metric;
+		unsigned long mask;
+		unsigned long mtu;
+		unsigned long window;
+		unsigned long irtt;
+		uint32_t dest_host;
+		uint32_t mask_host;
+		uint32_t target_host;
+
+		if (sscanf(line, "%15s %lx %lx %lx %lx %lx %lx %lx %lx %lx %lx",
+			   iface, &destination, &gateway, &flags, &refcnt, &use,
+			   &metric, &mask, &mtu, &window, &irtt) != 11)
+			continue;
+
+		if (!(flags & 0x1UL))
+			continue;
+
+		dest_host = ntohl((uint32_t)destination);
+		mask_host = ntohl((uint32_t)mask);
+		target_host = ntohl(dest_addr.s_addr);
+
+		if ((target_host & mask_host) != (dest_host & mask_host))
+			continue;
+
+		if (!found || mask_host > best_mask) {
+			strncpy(ifname_buf, iface, ifname_buf_len - 1);
+			ifname_buf[ifname_buf_len - 1] = '\0';
+			best_mask = mask_host;
+			found = true;
+		}
+	}
+
+	fclose(fp);
+	return found ? 0 : -1;
+}
+
+static int mac_for_interface(const char *ifname, char *mac_buf, size_t mac_buf_len)
+{
+	int fd;
+	struct ifreq ifr;
+	unsigned char *hwaddr;
+
+	if (!ifname || !*ifname || !mac_buf || mac_buf_len < 18)
+		return -1;
+
+	fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0)
+		return -1;
+
+	memset(&ifr, 0, sizeof(ifr));
+	snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", ifname);
+	if (ioctl(fd, SIOCGIFHWADDR, &ifr) < 0) {
+		close(fd);
+		return -1;
+	}
+	close(fd);
+
+#ifdef __linux__
+	if (ifr.ifr_hwaddr.sa_family != ARPHRD_ETHER)
+		return -1;
+#endif
+
+	hwaddr = (unsigned char *)ifr.ifr_hwaddr.sa_data;
+	snprintf(mac_buf, mac_buf_len,
+		 "%02x:%02x:%02x:%02x:%02x:%02x",
+		 hwaddr[0], hwaddr[1], hwaddr[2], hwaddr[3], hwaddr[4], hwaddr[5]);
+	return 0;
+}
+
+int uboot_http_get_upload_mac(const char *base_uri, char *mac_buf, size_t mac_buf_len)
+{
+	struct in_addr dest_addr;
+	char ifname[IF_NAMESIZE];
+
+	if (!mac_buf || mac_buf_len < 18)
+		return -1;
+	mac_buf[0] = '\0';
+
+	if (resolve_uri_ipv4(base_uri, &dest_addr) < 0)
+		return -1;
+	if (route_iface_for_ipv4(dest_addr, ifname, sizeof(ifname)) < 0)
+		return -1;
+	if (mac_for_interface(ifname, mac_buf, mac_buf_len) < 0)
+		return -1;
+
+	return 0;
+}
+
 char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type, const char *file_path)
 {
 	const char *scheme_end;
 	const char *authority;
 	const char *authority_end;
 	const char *query = "";
+	char mac_addr[18];
 	char *out;
 	char *escaped_file = NULL;
 	size_t prefix_len;
 	size_t query_len;
+	size_t mac_len;
 	size_t type_len;
 
 	if (!base_uri || !*base_uri || !upload_type || !*upload_type)
@@ -238,6 +434,9 @@ char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type,
 	while (*authority_end && *authority_end != '/' && *authority_end != '?' && *authority_end != '#')
 		authority_end++;
 
+	if (uboot_http_get_upload_mac(base_uri, mac_addr, sizeof(mac_addr)) < 0)
+		return NULL;
+
 	if (file_path && *file_path) {
 		CURL *curl = curl_easy_init();
 		if (!curl)
@@ -250,9 +449,10 @@ char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type,
 	}
 
 	prefix_len = (size_t)(authority_end - base_uri);
+	mac_len = strlen(mac_addr);
 	type_len = strlen(upload_type);
 	query_len = strlen(query) + (escaped_file ? strlen(escaped_file) : 0);
-	out = malloc(prefix_len + strlen("/upload/") + type_len + query_len + 1);
+	out = malloc(prefix_len + 1 + mac_len + strlen("/upload/") + type_len + query_len + 1);
 	if (!out) {
 		if (escaped_file)
 			curl_free(escaped_file);
@@ -260,12 +460,14 @@ char *uboot_http_build_upload_uri(const char *base_uri, const char *upload_type,
 	}
 
 	memcpy(out, base_uri, prefix_len);
-	memcpy(out + prefix_len, "/upload/", strlen("/upload/"));
-	memcpy(out + prefix_len + strlen("/upload/"), upload_type, type_len);
-	memcpy(out + prefix_len + strlen("/upload/") + type_len, query, strlen(query));
+	out[prefix_len] = '/';
+	memcpy(out + prefix_len + 1, mac_addr, mac_len);
+	memcpy(out + prefix_len + 1 + mac_len, "/upload/", strlen("/upload/"));
+	memcpy(out + prefix_len + 1 + mac_len + strlen("/upload/"), upload_type, type_len);
+	memcpy(out + prefix_len + 1 + mac_len + strlen("/upload/") + type_len, query, strlen(query));
 	if (escaped_file)
-		memcpy(out + prefix_len + strlen("/upload/") + type_len + strlen(query), escaped_file, strlen(escaped_file));
-	out[prefix_len + strlen("/upload/") + type_len + query_len] = '\0';
+		memcpy(out + prefix_len + 1 + mac_len + strlen("/upload/") + type_len + strlen(query), escaped_file, strlen(escaped_file));
+	out[prefix_len + 1 + mac_len + strlen("/upload/") + type_len + query_len] = '\0';
 
 	if (escaped_file)
 		curl_free(escaped_file);

@@ -11,25 +11,26 @@ module.exports = function registerUploadRoute(app, deps) {
     writeUploadFile,
     augmentJsonPayload,
     logPathForContentType,
+    isValidMacAddress,
     verboseRequestLog,
     verboseResponseLog,
     getClientIp
   } = deps;
 
-  function uploadDirectoryForType(uploadType) {
+  function uploadDirectoryForType(baseDir, uploadType) {
     switch (uploadType) {
       case 'log':
-        return path.join(dataDir, 'logs');
+        return path.join(baseDir, 'logs');
       case 'dmesg':
-        return path.join(dataDir, 'dmesg');
+        return path.join(baseDir, 'dmesg');
       case 'orom':
-        return path.join(dataDir, 'orom');
+        return path.join(baseDir, 'orom');
       case 'uboot-image':
-        return path.join(dataDir, 'uboot', 'image');
+        return path.join(baseDir, 'uboot', 'image');
       case 'uboot-environment':
-        return path.join(dataDir, 'uboot', 'env');
+        return path.join(baseDir, 'uboot', 'env');
       default:
-        return path.join(dataDir, uploadType);
+        return path.join(baseDir, uploadType);
     }
   }
 
@@ -49,18 +50,27 @@ module.exports = function registerUploadRoute(app, deps) {
     await fsp.symlink(symlinkTarget, dest);
   }
 
-  app.post('/upload/:type', async (req, res) => {
+  app.post('/:mac/upload/:type', async (req, res) => {
     verboseRequestLog(req);
+    const macAddress = String(req.params.mac || '').toLowerCase();
     const uploadType = req.params.type;
     const contentTypeHeader = req.get('Content-Type') || '';
     const normalizedContentType = normalizeContentType(contentTypeHeader);
     const payload = Buffer.isBuffer(req.body) ? req.body : Buffer.from([]);
     const timestamp = new Date().toISOString();
     const srcIp = getClientIp(req);
+    const macDataDir = path.join(dataDir, macAddress);
     const requestedFilePath = sanitizeUploadPath(req.query.filePath);
     const symlink = req.query.symlink;
     const symlinkPath = req.query.symlinkPath;
     const wantsSymlink = symlink === 'true';
+
+    if (!isValidMacAddress(macAddress)) {
+      const body = 'invalid mac address\n';
+      res.status(400).type('text').send(body);
+      verboseResponseLog(req, 400, Buffer.byteLength(body));
+      return;
+    }
 
     if (uploadType !== 'file' && (symlink !== undefined || symlinkPath !== undefined)) {
       const body = 'symlink arguments only allowed for /upload/file\n';
@@ -127,7 +137,7 @@ module.exports = function registerUploadRoute(app, deps) {
 
     if (uploadType === 'file' && wantsSymlink) {
       try {
-        await writeSymlink(path.join(dataDir, 'fs'), requestedFilePath, symlinkPath);
+        await writeSymlink(path.join(macDataDir, 'fs'), requestedFilePath, symlinkPath);
       } catch {
         const body = 'invalid symlink upload\n';
         res.status(400).type('text').send(body);
@@ -136,7 +146,7 @@ module.exports = function registerUploadRoute(app, deps) {
       }
     } else if (uploadType === 'file' && requestedFilePath) {
       try {
-        await writeUploadFile(path.join(dataDir, 'fs'), requestedFilePath, payload);
+        await writeUploadFile(path.join(macDataDir, 'fs'), requestedFilePath, payload);
       } catch {
         const body = 'invalid filePath\n';
         res.status(400).type('text').send(body);
@@ -144,7 +154,7 @@ module.exports = function registerUploadRoute(app, deps) {
         return;
       }
     } else {
-      const targetDir = uploadDirectoryForType(uploadType);
+      const targetDir = uploadDirectoryForType(macDataDir, uploadType);
       await fsp.mkdir(targetDir, { recursive: true });
 
       if (normalizedContentType === 'application/octet-stream') {
