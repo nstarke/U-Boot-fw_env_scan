@@ -5,7 +5,7 @@ set -u
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 
-# shellcheck source=tests/api/common.sh
+# shellcheck source=tests/api/agent/common.sh
 . "$SCRIPT_DIR/common.sh"
 
 print_section "api server argument parsing"
@@ -17,7 +17,7 @@ TEST_TMPDIR_ARGS="$TMPDIR_ARGS" REPO_ROOT="$REPO_ROOT" node - <<'NODE'
 const path = require('path');
 const repoRoot = process.env.REPO_ROOT;
 const tmpDir = process.env.TEST_TMPDIR_ARGS;
-const { parseArgs, printHelp } = require(path.join(repoRoot, 'api', 'server.js'));
+const { parseArgs, printHelp } = require(path.join(repoRoot, 'api', 'agent', 'server.js'));
 
 function fail(message) {
   console.error(message);

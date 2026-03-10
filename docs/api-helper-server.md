@@ -1,28 +1,28 @@
 # API Helper Server
 
-Use the Node.js helper in `api/` as the local helper for testing HTTP/HTTPS POST output and serving downloaded release binaries/test scripts.
+Use the Node.js helper in `api/agent/` as the local helper for testing HTTP/HTTPS POST output and serving downloaded release binaries/test scripts.
 
 Example:
 
 ```bash
-cd api && npm start -- --host 0.0.0.0 --port 5000 --log-prefix post_requests
+cd api/agent && npm start -- --host 0.0.0.0 --port 5000 --log-prefix post_requests
 ```
 
 You can also enable verbose per-request console logging with either:
 
 ```bash
-cd api && npm start --verbose
+cd api/agent && npm start --verbose
 ```
 
 or:
 
 ```bash
-cd api && npm start -- --verbose
+cd api/agent && npm start -- --verbose
 ```
 
 Additional server options:
 
-- `--data-dir` changes the base directory used for helper-server data storage. By default this is `api/data`.
+- `--data-dir` changes the base directory used for helper-server data storage. By default this is `api/agent/data`.
 - `--https` enables HTTPS with a self-signed localhost certificate.
 - `--clean` deletes runtime upload data under the configured data directory before startup, but preserves cached release binaries in `<data-dir>/release_binaries`.
 - `--force-download` refreshes the cached release binaries in `<data-dir>/release_binaries`.

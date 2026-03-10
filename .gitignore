@@ -4,6 +4,6 @@ generated/
 __pycache__
 release_binaries
 node_modules
-api/data/*
+api/agent/data/*
 *.log   
 embedded_linux_audit

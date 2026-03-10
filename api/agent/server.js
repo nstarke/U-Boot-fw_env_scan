@@ -311,7 +311,7 @@ function parseArgs(argv) {
     host: '0.0.0.0',
     port: 5000,
     logPrefix: 'post_requests',
-    dataDir: 'api/data',
+    dataDir: 'api/agent/data',
     repo: 'nstarke/embedded_linux_audit',
     assetsDir: null,
     testsDir: 'tests',

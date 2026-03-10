@@ -80,7 +80,7 @@ const path = require('path');
 const repoRoot = process.env.REPO_ROOT;
 const tmpDir = process.env.TEST_WEB_TMPDIR;
 const port = Number(process.env.TEST_WEB_PORT);
-const { createApp } = require(path.join(repoRoot, 'api', 'server.js'));
+const { createApp } = require(path.join(repoRoot, 'api', 'agent', 'server.js'));
 
 const app = createApp({
   logPrefix: path.join(tmpDir, 'post_requests'),

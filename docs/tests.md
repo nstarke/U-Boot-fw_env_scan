@@ -3,7 +3,7 @@
 This repository includes shell-based argument coverage tests under `tests/agent/`.
 
 - `tests/agent/` contains the existing agent shell tests.
-- `tests/api/` is reserved for api-related tests.
+- `tests/api/agent/` is reserved for api-related tests.
 
 ## Prerequisites
 

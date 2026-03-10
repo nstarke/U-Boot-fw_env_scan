@@ -21,7 +21,7 @@ TEST_TMPDIR_CLEAN="$TMPDIR_CLEAN" REPO_ROOT="$REPO_ROOT" node - <<'NODE'
 const path = require('path');
 const repoRoot = process.env.REPO_ROOT;
 const tmpDir = process.env.TEST_TMPDIR_CLEAN;
-const { removeDirectoryContents } = require(path.join(repoRoot, 'api', 'server.js'));
+const { removeDirectoryContents } = require(path.join(repoRoot, 'api', 'agent', 'server.js'));
 
 removeDirectoryContents(path.join(tmpDir, 'data'), new Set(['release_binaries']))
   .catch((err) => {
