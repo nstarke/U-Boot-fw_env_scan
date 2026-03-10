@@ -20,6 +20,7 @@ module.exports = function registerUploadRoute(app, deps) {
   function uploadDirectoryForType(baseDir, uploadType) {
     switch (uploadType) {
       case 'log':
+      case 'logs':
         return path.join(baseDir, 'logs');
       case 'dmesg':
         return path.join(baseDir, 'dmesg');
@@ -33,6 +34,16 @@ module.exports = function registerUploadRoute(app, deps) {
         return path.join(baseDir, 'uboot', 'env');
       default:
         return path.join(baseDir, uploadType);
+    }
+  }
+
+  function logFilePrefixForUploadType(targetDir, uploadType) {
+    switch (uploadType) {
+      case 'log':
+      case 'logs':
+        return path.join(targetDir, 'log');
+      default:
+        return path.join(targetDir, uploadType);
     }
   }
 
@@ -203,7 +214,7 @@ module.exports = function registerUploadRoute(app, deps) {
         const binaryPath = path.join(targetDir, `upload_${tsSafe}_${safeIp}_${unique}${extension}`);
         await fsp.writeFile(binaryPath, payload);
       } else {
-        const targetLogPath = logPathForContentType(path.join(targetDir, uploadType), contentTypeHeader);
+        const targetLogPath = logPathForContentType(logFilePrefixForUploadType(targetDir, uploadType), contentTypeHeader);
         await fsp.mkdir(path.dirname(targetLogPath), { recursive: true });
         await fsp.appendFile(
           targetLogPath,
