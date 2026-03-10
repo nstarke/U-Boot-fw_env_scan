@@ -41,6 +41,10 @@ own licenses:
 - `third_party/libubootenv` — LGPL-2.1-or-later (project/library code), with
   additional REUSE-declared licenses in `third_party/libubootenv/LICENSES/`
   including MIT and CC0-1.0
+- `third_party/ncurses` — ncurses license / MIT-like permissive license
+  (`third_party/ncurses/COPYING`)
+- `third_party/readline` — GNU General Public License v3 or later
+  (`third_party/readline/COPYING`)
 - `third_party/zlib` — zlib License (`third_party/zlib/LICENSE`)
 
 Please consult the referenced files within each submodule for complete and

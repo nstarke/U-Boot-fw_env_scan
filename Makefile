@@ -3,6 +3,8 @@ CFLAGS  ?= -O2 -Wall -Wextra
 LDFLAGS ?=
 LDLIBS  ?=
 
+ELA_USE_READLINE ?= 1
+
 ifneq (,$(findstring zig cc,$(CC)))
 LDFLAGS += -Wl,--no-gc-sections
 endif
@@ -70,6 +72,16 @@ OPENSSL_BUILD := $(OPENSSL_DIR)/build-$(CC_TAG)
 OPENSSL_INSTALL := $(OPENSSL_BUILD)/install
 OPENSSL_LIB   := $(OPENSSL_INSTALL)/lib/libcrypto.a
 OPENSSL_CFLAGS := -I$(OPENSSL_INSTALL)/include
+NCURSES_DIR   := third_party/ncurses
+NCURSES_BUILD_STAMP := $(NCURSES_DIR)/.ela-build-$(CC_TAG)
+NCURSES_LIB_DIR := $(NCURSES_DIR)/lib
+NCURSES_LIB   := $(NCURSES_LIB_DIR)/libncurses.a
+NCURSES_TINFO_LIB := $(NCURSES_LIB_DIR)/libtinfo.a
+READLINE_DIR  := third_party/readline
+READLINE_BUILD_STAMP := $(READLINE_DIR)/.ela-build-$(CC_TAG)
+READLINE_LIB  := $(READLINE_DIR)/libreadline.a
+READLINE_HISTORY_LIB := $(READLINE_DIR)/libhistory.a
+READLINE_BUILD_CFLAGS ?= -O2 -Wno-incompatible-pointer-types
 GENERATED_DIR := generated
 DEFAULT_CA_BUNDLE_PEM := $(GENERATED_DIR)/cacert.pem
 CA_BUNDLE_URL ?= https://curl.se/ca/cacert.pem
@@ -84,6 +96,14 @@ CFLAGS += $(CURL_CFLAGS)
 CFLAGS += $(OPENSSL_CFLAGS)
 CFLAGS += -I.
 CFLAGS += -Iagent
+
+ifeq ($(ELA_USE_READLINE),1)
+CFLAGS += -DELA_HAS_READLINE -I$(READLINE_DIR)
+LDLIBS += $(READLINE_LIB) $(READLINE_HISTORY_LIB) $(NCURSES_LIB) $(NCURSES_TINFO_LIB)
+READLINE_DEPS := $(NCURSES_BUILD_STAMP) $(READLINE_BUILD_STAMP)
+else
+READLINE_DEPS :=
+endif
 
 TARGET := embedded_linux_audit
 SRC    := agent/embedded_linux_audit.c agent/uboot/env/uboot_env_cmd.c agent/uboot/env/uboot_env_read_vars_cmd.c agent/uboot/env/uboot_env_write_vars_cmd.c agent/uboot/uboot_image_cmd.c agent/uboot/image/uboot_image_pull_cmd.c agent/uboot/image/uboot_image_find_address_cmd.c agent/uboot/image/uboot_image_list_commands_cmd.c agent/uboot/uboot_security_audit_cmd.c agent/linux/linux_dmesg_cmd.c agent/linux/linux_execute_command_cmd.c agent/linux/linux_list_files_cmd.c agent/linux/linux_list_symlinks_cmd.c agent/linux/linux_remote_copy_cmd.c agent/orom/orom_pull_cmd_common.c agent/efi/efi_pull_orom_cmd.c agent/bios/bios_pull_orom_cmd.c agent/embedded_linux_audit_cmd.c \
@@ -140,7 +160,19 @@ endif
 $(GENERATED_CA_SRC): tools/embed_ca_bundle.py $(CA_BUNDLE_PEM)
 	python3 tools/embed_ca_bundle.py --input "$(CA_BUNDLE_PEM)" --output "$@"
 
-$(TARGET): $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_LIB)
+$(NCURSES_BUILD_STAMP):
+	cd $(NCURSES_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
+	cd $(NCURSES_DIR) && ./configure --without-shared --without-cxx --without-cxx-binding --without-ada --without-tests --without-progs --without-manpages --with-normal --with-termlib CC='$(CC)' CFLAGS='$(CFLAGS)'
+	$(MAKE) -C $(NCURSES_DIR) -j2 libs
+	touch $@
+
+$(READLINE_BUILD_STAMP):
+	cd $(READLINE_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
+	cd $(READLINE_DIR) && bash_cv_termcap_lib=libtermcap ac_cv_type_signal=void bash_cv_void_sighandler=yes ./configure --disable-shared --enable-static CC='$(CC) -std=gnu89' CFLAGS='$(READLINE_BUILD_CFLAGS)' LDFLAGS='-L$(abspath $(NCURSES_LIB_DIR))'
+	$(MAKE) -C $(READLINE_DIR) libreadline.a libhistory.a
+	touch $@
+
+$(TARGET): $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
 	$(CC) $(CFLAGS) -o $@ $(SRC) $(LIBUBOOTENV_LIB) $(ZLIB_LIB) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_LIB) $(LDFLAGS) $(LDLIBS)
 
 static: LDFLAGS += -static
@@ -158,5 +190,9 @@ clean:
 	rm -rf $(CURL_DIR)/build*
 	-cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	rm -rf $(OPENSSL_BUILD)
+	-cd $(NCURSES_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
+	rm -f $(NCURSES_BUILD_STAMP)
+	-cd $(READLINE_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
+	rm -f $(READLINE_BUILD_STAMP)
 	-git submodule foreach --recursive 'git clean -xfd >/dev/null 2>&1 || true'
 	-git submodule foreach --recursive 'git reset --hard >/dev/null 2>&1 || true'

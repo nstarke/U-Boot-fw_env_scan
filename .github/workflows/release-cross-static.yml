@@ -70,6 +70,8 @@ jobs:
           set -euo pipefail
           test -f agent/embedded_linux_audit.c
           test -f agent/embedded_linux_audit_cmd.h
+          test -f third_party/ncurses/configure
+          test -f third_party/readline/readline.h
           mkdir -p dist/${{ matrix.name }}
 
           IFS=',' read -ra TARGETS <<< "${{ matrix.zig_targets }}"
@@ -78,6 +80,7 @@ jobs:
             echo "Trying target: ${T}"
             if make clean \
                && make static \
+                    ELA_USE_READLINE=0 \
                     CMAKE_C_COMPILER="$(command -v zig)" \
                     CMAKE_C_COMPILER_ARG1=cc \
                     CMAKE_C_COMPILER_TARGET="${T}" \

@@ -9,6 +9,8 @@
 - **Rule-based auditing** (`embedded_linux_audit uboot audit`): runs compiled rules against selected bytes to validate security and configuration expectations.
 - **Linux utilities** (`embedded_linux_audit linux dmesg`, `embedded_linux_audit linux remote-copy`): collect kernel logs and transfer files.
 
+Running `embedded_linux_audit` with no arguments starts an interactive shell that exposes the same command groups/subcommands, supports tab completion for interactive groups and subcommands, and provides a `set` helper for configuring `ELA_API_URL` and `ELA_API_INSECURE` in the current process.
+
 ## How it works
 
 At runtime, `embedded_linux_audit` probes MTD/UBI and block devices (including SD/eMMC patterns), applies U-Boot-aware parsers/validators (CRC, FIT/uImage structure checks, rule engines), and produces human-readable or machine-readable output (`txt`, `csv`, `json`).
