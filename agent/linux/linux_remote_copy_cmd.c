@@ -73,6 +73,18 @@ static bool stat_is_copyable_file(const struct stat *st)
 	return S_ISREG(st->st_mode) || S_ISCHR(st->st_mode) || S_ISBLK(st->st_mode);
 }
 
+static void print_verbose_copy_summary(const char *path, uint64_t copied_files)
+{
+	if (!path)
+		return;
+
+	fprintf(stderr,
+		"remote-copy copied path %s (%" PRIu64 " file%s copied)\n",
+		path,
+		copied_files,
+		copied_files == 1 ? "" : "s");
+}
+
 static int send_symlink_to_http(const char *path, const char *output_uri, bool insecure, bool verbose)
 {
 	char errbuf[256];
@@ -134,9 +146,6 @@ static int send_symlink_to_http(const char *path, const char *output_uri, bool i
 		return -1;
 	}
 
-	if (verbose)
-		fprintf(stderr, "remote-copy sent symlink %s -> %s via %s\n", path, target, upload_uri);
-
 	free(upload_uri);
 	return 0;
 }
@@ -146,7 +155,7 @@ static int send_file_to_tcp(const char *path, const char *output_tcp, bool verbo
 	uint8_t buf[4096];
 	int fd;
 	int sock;
-	uint64_t sent = 0;
+	(void)verbose;
 
 	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
@@ -177,11 +186,7 @@ static int send_file_to_tcp(const char *path, const char *output_tcp, bool verbo
 			close(fd);
 			return -1;
 		}
-		sent += (uint64_t)n;
 	}
-
-	if (verbose)
-		fprintf(stderr, "remote-copy sent %" PRIu64 " bytes from %s to %s\n", sent, path, output_tcp);
 
 	close(sock);
 	close(fd);
@@ -197,6 +202,7 @@ static int send_file_to_http(const char *path, const char *output_uri, bool inse
 	size_t data_cap = 0;
 	int fd = -1;
 	int rc = -1;
+	(void)verbose;
 
 	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
@@ -252,10 +258,6 @@ static int send_file_to_http(const char *path, const char *output_uri, bool inse
 		goto out;
 	}
 
-	if (verbose)
-		fprintf(stderr, "remote-copy sent %" PRIu64 " bytes from %s to %s\n",
-			(uint64_t)data_len, path, upload_uri);
-
 	rc = 0;
 
 out:
@@ -274,7 +276,8 @@ static int upload_path_http(const char *path,
 			    bool allow_dev,
 			    bool allow_sysfs,
 			    bool allow_proc,
-			    bool allow_symlinks)
+			    bool allow_symlinks,
+			    uint64_t *copied_files)
 {
 	struct stat st;
 
@@ -294,7 +297,12 @@ static int upload_path_http(const char *path,
 				fprintf(stderr, "Skipping symlink without --allow-symlinks: %s\n", path);
 			return 0;
 		}
-		return send_symlink_to_http(path, output_uri, insecure, verbose);
+		if (send_symlink_to_http(path, output_uri, insecure, verbose) == 0) {
+			if (copied_files)
+				(*copied_files)++;
+			return 0;
+		}
+		return -1;
 	}
 
 	if (S_ISDIR(st.st_mode)) {
@@ -338,7 +346,8 @@ static int upload_path_http(const char *path,
 			}
 
 			child_rc = upload_path_http(child, output_uri, insecure, verbose,
-				recursive, allow_dev, allow_sysfs, allow_proc, allow_symlinks);
+				recursive, allow_dev, allow_sysfs, allow_proc, allow_symlinks,
+				copied_files);
 			free(child);
 			if (child_rc != 0) {
 				rc = -1;
@@ -356,7 +365,13 @@ static int upload_path_http(const char *path,
 		return 0;
 	}
 
-	return send_file_to_http(path, output_uri, insecure, verbose);
+	if (send_file_to_http(path, output_uri, insecure, verbose) == 0) {
+		if (copied_files)
+			(*copied_files)++;
+		return 0;
+	}
+
+	return -1;
 }
 
 int linux_remote_copy_scan_main(int argc, char **argv)
@@ -374,6 +389,7 @@ int linux_remote_copy_scan_main(int argc, char **argv)
 	bool allow_symlinks = false;
 	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
 	bool verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
+	uint64_t copied_files = 0;
 	int opt;
 
 	static const struct option long_opts[] = {
@@ -504,9 +520,21 @@ int linux_remote_copy_scan_main(int argc, char **argv)
 			fprintf(stderr, "Path is not a supported file for TCP transfer: %s\n", path);
 			return 1;
 		}
-		return send_file_to_tcp(path, output_tcp, verbose) == 0 ? 0 : 1;
+		if (send_file_to_tcp(path, output_tcp, verbose) != 0)
+			return 1;
+		copied_files = 1;
+		if (verbose)
+			print_verbose_copy_summary(path, copied_files);
+		return 0;
 	}
 
-	return upload_path_http(path, output_uri, insecure, verbose,
-		recursive, allow_dev, allow_sysfs, allow_proc, allow_symlinks) == 0 ? 0 : 1;
+	if (upload_path_http(path, output_uri, insecure, verbose,
+			recursive, allow_dev, allow_sysfs, allow_proc, allow_symlinks,
+			&copied_files) != 0)
+		return 1;
+
+	if (verbose)
+		print_verbose_copy_summary(path, copied_files);
+
+	return 0;
 }

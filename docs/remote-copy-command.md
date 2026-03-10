@@ -20,7 +20,7 @@ The source path must be a full absolute OS path. Directory uploads are supported
 - `--allow-proc` — allow copying paths under `/proc`
 - `--allow-symlinks` — upload symlinks as symlinks over HTTP(S)
 - `--insecure` — disable TLS certificate and hostname verification for HTTPS output
-- `--verbose` — print transfer progress; preferred at the top level
+- `--quiet` — disable transfer progress logging at the top level (verbose logging is enabled by default)
 
 ## Constraints
 
@@ -39,7 +39,8 @@ The source path must be a full absolute OS path. Directory uploads are supported
 ./embedded_linux_audit --output-tcp 192.168.1.50:5000 linux remote-copy /tmp/fw.bin
 ./embedded_linux_audit --output-http http://192.168.1.50:5000 linux remote-copy /tmp/fw.bin
 ./embedded_linux_audit --output-https https://192.168.1.50:5443 linux remote-copy /tmp/fw.bin
-./embedded_linux_audit --output-https https://192.168.1.50:5443 --verbose linux remote-copy /tmp/fw.bin --insecure
+./embedded_linux_audit --output-https https://192.168.1.50:5443 linux remote-copy /tmp/fw.bin --insecure
+./embedded_linux_audit --quiet --output-https https://192.168.1.50:5443 linux remote-copy /tmp/fw.bin --insecure
 ./embedded_linux_audit --output-http http://192.168.1.50:5000 linux remote-copy /tmp/fw_dir --recursive
 ./embedded_linux_audit --output-http http://192.168.1.50:5000 linux remote-copy /proc/device-tree --recursive --allow-proc
 ./embedded_linux_audit --output-http http://192.168.1.50:5000 linux remote-copy /tmp/link_to_fw --allow-symlinks

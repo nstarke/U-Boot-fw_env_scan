@@ -86,7 +86,7 @@ run_accept_case "linux remote-copy --output-tcp" "$BIN" linux remote-copy "$TMP_
 run_accept_case "linux remote-copy --output-http" "$BIN" linux remote-copy "$TMP_FILE" --output-http http://127.0.0.1:1
 run_accept_case "linux remote-copy --output-https" "$BIN" linux remote-copy "$TMP_FILE" --output-https https://127.0.0.1:1
 run_accept_case "--insecure linux remote-copy --output-https" "$BIN" --insecure linux remote-copy "$TMP_FILE" --output-https https://127.0.0.1:1
-run_accept_case "linux remote-copy --verbose" "$BIN" linux remote-copy "$TMP_FILE" --output-http http://127.0.0.1:1 --verbose
+run_accept_case "linux remote-copy --quiet" "$BIN" --quiet linux remote-copy "$TMP_FILE" --output-http http://127.0.0.1:1
 run_accept_case "linux remote-copy directory http" "$BIN" linux remote-copy "$TMP_DIR" --output-http http://127.0.0.1:1
 run_accept_case "linux remote-copy directory http --recursive" "$BIN" linux remote-copy "$TMP_DIR" --output-http http://127.0.0.1:1 --recursive
 run_accept_case "linux remote-copy directory https --recursive" "$BIN" linux remote-copy "$TMP_DIR" --output-https https://127.0.0.1:1 --recursive
@@ -106,7 +106,7 @@ fi
 
 if [ -r /proc/cmdline ]; then
     run_accept_case "linux remote-copy /proc/cmdline over http (non-sized stream-like file)" \
-        "$BIN" linux remote-copy /proc/cmdline --output-http http://127.0.0.1:1 --verbose --allow-proc
+        "$BIN" linux remote-copy /proc/cmdline --output-http http://127.0.0.1:1 --allow-proc
 fi
 
 if [ -d /proc ]; then
@@ -132,6 +132,63 @@ else
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$warn_log"
+
+verbose_server_log="$(mktemp /tmp/test_remote_copy_verbose_server.XXXXXX)"
+verbose_log="$(mktemp /tmp/test_remote_copy_verbose.XXXXXX)"
+verbose_port_file="$(mktemp /tmp/test_remote_copy_verbose_port.XXXXXX)"
+python -c '
+import http.server
+import socketserver
+import sys
+
+port_file = sys.argv[1]
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        if length:
+            self.rfile.read(length)
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"ok")
+    def log_message(self, format, *args):
+        pass
+
+with socketserver.TCPServer(("127.0.0.1", 0), Handler) as httpd:
+    with open(port_file, "w", encoding="utf-8") as f:
+        f.write(str(httpd.server_address[1]))
+    httpd.handle_request()
+' "$verbose_port_file" >"$verbose_server_log" 2>&1 &
+verbose_server_pid=$!
+
+verbose_port=""
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if [ -s "$verbose_port_file" ]; then
+        verbose_port="$(cat "$verbose_port_file")"
+        break
+    fi
+    sleep 1
+done
+
+if [ -n "$verbose_port" ]; then
+    "$BIN" linux remote-copy "$TMP_FILE" --output-http "http://127.0.0.1:$verbose_port/upload" --verbose >"$verbose_log" 2>&1
+    rc=$?
+    if [ "$rc" -eq 0 ] && grep -q "remote-copy copied path $TMP_FILE (1 file copied)" "$verbose_log"; then
+        echo "[PASS] linux remote-copy verbose output includes path and copied file count"
+        PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+    else
+        echo "[FAIL] linux remote-copy verbose output includes path and copied file count (rc=$rc)"
+        sed -n '1,120p' "$verbose_log"
+        FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+    fi
+else
+    echo "[FAIL] linux remote-copy verbose output test could not start local HTTP server"
+    sed -n '1,80p' "$verbose_server_log"
+    FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+fi
+
+wait "$verbose_server_pid" 2>/dev/null || true
+rm -f "$verbose_server_log" "$verbose_log" "$verbose_port_file"
 
 rm -rf "$TMP_DIR"
 finish_tests

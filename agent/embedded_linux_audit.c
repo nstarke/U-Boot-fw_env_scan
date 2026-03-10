@@ -10,11 +10,11 @@
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s [--output-format <csv|json|txt>] [--verbose] [--insecure] [--output-tcp <IPv4:port>] [--output-http <http://host:port/path>] [--output-https <https://host:port/path>] <group> <subcommand> [options]\n"
+		"Usage: %s [--output-format <csv|json|txt>] [--quiet] [--insecure] [--output-tcp <IPv4:port>] [--output-http <http://host:port/path>] [--output-https <https://host:port/path>] <group> <subcommand> [options]\n"
 		"\n"
 		"Global options:\n"
 		"  --output-format <csv|json|txt>  Set output format for subcommands\n"
-		"  --verbose                        Enable verbose mode for commands/subcommands\n"
+		"  --quiet                         Disable verbose mode for commands/subcommands\n"
 		"  --insecure                      Disable TLS certificate/hostname verification for HTTPS\n"
 		"  --output-tcp <IPv4:port>         Configure TCP remote output for commands/subcommands\n"
 		"  --output-http <http://...>       Configure HTTP remote output for commands/subcommands\n"
@@ -32,15 +32,15 @@ static void usage(const char *prog)
 		"  bios orom          BIOS option ROM utilities (pull/list)\n"
 		"\n"
 		"Examples:\n"
-		"  %s --verbose uboot env\n"
+		"  %s uboot env\n"
 		"  %s uboot image --dev /dev/mtdblock4 --step 0x1000\n"
 		"  %s uboot audit --dev /dev/mtdblock4 --offset 0x0 --size 0x10000\n"
-		"  %s --verbose --output-http http://127.0.0.1:5000/dmesg linux dmesg\n"
+		"  %s --output-http http://127.0.0.1:5000/dmesg linux dmesg\n"
 		"  %s --output-http http://127.0.0.1:5000 linux list-files /etc\n"
 		"  %s --output-format json --output-http http://127.0.0.1:5000 linux list-symlinks /etc --recursive\n"
 		"  %s --output-https https://127.0.0.1:5443 linux remote-copy /tmp/fw.bin\n"
-		"  %s --output-http http://127.0.0.1:5000/orom --verbose efi orom pull\n"
-		"  %s --output-tcp 127.0.0.1:5001 --verbose bios orom list\n",
+		"  %s --quiet --output-http http://127.0.0.1:5000/orom efi orom pull\n"
+		"  %s --quiet --output-tcp 127.0.0.1:5001 bios orom list\n",
 		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
@@ -50,7 +50,7 @@ int main(int argc, char **argv)
 	const char *output_tcp = NULL;
 	const char *output_http = NULL;
 	const char *output_https = NULL;
-	bool verbose = false;
+	bool verbose = true;
 	bool insecure = false;
 	bool output_format_explicit = false;
 	int cmd_idx = 1;
@@ -80,8 +80,8 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (!strcmp(argv[cmd_idx], "--verbose")) {
-			verbose = true;
+		if (!strcmp(argv[cmd_idx], "--quiet")) {
+			verbose = false;
 			cmd_idx++;
 			continue;
 		}
