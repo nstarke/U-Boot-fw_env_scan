@@ -75,12 +75,19 @@ run_accept_case "uboot env --output-config=path --size $TEST_SIZE" "$BIN" uboot 
 run_accept_case "uboot env --output-tcp --size $TEST_SIZE" "$BIN" uboot env --output-tcp 127.0.0.1:9 --size "$TEST_SIZE"
 run_accept_case "uboot env --output-http --size $TEST_SIZE" "$BIN" uboot env --output-http http://127.0.0.1:1/env --size "$TEST_SIZE"
 run_accept_case "uboot env --output-https --size $TEST_SIZE" "$BIN" uboot env --output-https https://127.0.0.1:1/env --size "$TEST_SIZE"
-run_accept_case "uboot env --insecure --size $TEST_SIZE" "$BIN" uboot env --insecure --size "$TEST_SIZE"
+run_accept_case "--insecure uboot env --size $TEST_SIZE" "$BIN" --insecure uboot env --size "$TEST_SIZE"
+run_exact_case "uboot env invalid --size" 2 "$BIN" uboot env --size nope
+run_accept_case "uboot env invalid --output-http reaches pre-root path" "$BIN" uboot env --output-http ftp://127.0.0.1:1/env --size "$TEST_SIZE"
+run_accept_case "uboot env invalid --output-https reaches pre-root path" "$BIN" uboot env --output-https http://127.0.0.1:1/env --size "$TEST_SIZE"
+run_accept_case "uboot env both http+https reaches pre-root path" "$BIN" uboot env --output-http http://127.0.0.1:1/env --output-https https://127.0.0.1:1/env --size "$TEST_SIZE"
+run_accept_case "uboot env rejects raw mtd char device after root check path" "$BIN" uboot env --dev /dev/mtd0 --size "$TEST_SIZE"
 
 if [ "$(current_uid)" -ne 0 ]; then
     run_accept_case "uboot env write-vars https URL (accepted before root check)" \
         "$BIN" uboot env write-vars https://127.0.0.1/fw_setenv_script.txt
 fi
+
+run_accept_case "uboot env write missing path reaches pre-root path" "$BIN" uboot env write
 
 if [ "$(current_uid)" -eq 0 ]; then
     TMP_ENV_IMAGE="$(mktemp /tmp/uboot_env_parse_vars.XXXXXX.bin)"

@@ -178,7 +178,7 @@ int linux_dmesg_scan_main(int argc, char **argv)
 
 	optind = 1;
 	g_verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
-	g_insecure = false;
+	g_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
 	if (g_output_sock >= 0) {
 		close(g_output_sock);
 		g_output_sock = -1;

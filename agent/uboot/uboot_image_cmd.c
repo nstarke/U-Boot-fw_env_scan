@@ -1408,6 +1408,7 @@ int uboot_image_scan_main(int argc, char **argv)
 	g_verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
 	g_allow_text = false;
 	g_allow_text_pattern = "U-Boot";
+	g_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
 	if (argc > 1) {
 		if (!strcmp(argv[1], "pull"))
 			return uboot_image_pull_main(argc - 1, argv + 1);

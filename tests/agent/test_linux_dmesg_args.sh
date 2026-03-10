@@ -58,10 +58,15 @@ print_section "linux dmesg subcommand argument coverage"
 run_exact_case "linux dmesg --help" 0 "$BIN" linux dmesg --help
 run_accept_case "linux dmesg" "$BIN" linux dmesg
 run_accept_case "linux dmesg --verbose" "$BIN" linux dmesg --verbose
+run_exact_case "linux dmesg extra positional arg" 2 "$BIN" linux dmesg extra
+run_exact_case "linux dmesg invalid --output-tcp" 2 "$BIN" linux dmesg --output-tcp invalid-target
 run_exact_case "linux dmesg --output-tcp + --help" 0 "$BIN" linux dmesg --output-tcp 127.0.0.1:9 --help
 run_accept_case "linux dmesg --output-http" "$BIN" linux dmesg --output-http http://127.0.0.1:1/dmesg
 run_accept_case "linux dmesg --output-https" "$BIN" linux dmesg --output-https https://127.0.0.1:1/dmesg
-run_accept_case "linux dmesg --insecure" "$BIN" linux dmesg --insecure
+run_exact_case "linux dmesg invalid --output-http" 2 "$BIN" linux dmesg --output-http ftp://127.0.0.1:1/dmesg
+run_exact_case "linux dmesg invalid --output-https" 2 "$BIN" linux dmesg --output-https http://127.0.0.1:1/dmesg
+run_exact_case "linux dmesg both http+https" 2 "$BIN" linux dmesg --output-http http://127.0.0.1:1/dmesg --output-https https://127.0.0.1:1/dmesg
+run_accept_case "--insecure linux dmesg" "$BIN" --insecure linux dmesg
 
 run_accept_case "linux dmesg with --output-format txt" "$BIN" --output-format txt linux dmesg
 run_accept_case "linux dmesg with --output-format csv" "$BIN" --output-format csv linux dmesg

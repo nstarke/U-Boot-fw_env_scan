@@ -10,11 +10,12 @@
 static void usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s [--output-format <csv|json|txt>] [--verbose] [--output-tcp <IPv4:port>] [--output-http <http://host:port/path>] [--output-https <https://host:port/path>] <group> <subcommand> [options]\n"
+		"Usage: %s [--output-format <csv|json|txt>] [--verbose] [--insecure] [--output-tcp <IPv4:port>] [--output-http <http://host:port/path>] [--output-https <https://host:port/path>] <group> <subcommand> [options]\n"
 		"\n"
 		"Global options:\n"
 		"  --output-format <csv|json|txt>  Set output format for subcommands\n"
 		"  --verbose                        Enable verbose mode for commands/subcommands\n"
+		"  --insecure                      Disable TLS certificate/hostname verification for HTTPS\n"
 		"  --output-tcp <IPv4:port>         Configure TCP remote output for commands/subcommands\n"
 		"  --output-http <http://...>       Configure HTTP remote output for commands/subcommands\n"
 		"  --output-https <https://...>     Configure HTTPS remote output for commands/subcommands\n"
@@ -50,6 +51,7 @@ int main(int argc, char **argv)
 	const char *output_http = NULL;
 	const char *output_https = NULL;
 	bool verbose = false;
+	bool insecure = false;
 	bool output_format_explicit = false;
 	int cmd_idx = 1;
 
@@ -80,6 +82,12 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[cmd_idx], "--verbose")) {
 			verbose = true;
+			cmd_idx++;
+			continue;
+		}
+
+		if (!strcmp(argv[cmd_idx], "--insecure")) {
+			insecure = true;
 			cmd_idx++;
 			continue;
 		}
@@ -179,6 +187,11 @@ int main(int argc, char **argv)
 
 	if (setenv("FW_AUDIT_VERBOSE", verbose ? "1" : "0", 1) != 0) {
 		fprintf(stderr, "Failed to set FW_AUDIT_VERBOSE\n");
+		return 2;
+	}
+
+	if (setenv("FW_AUDIT_OUTPUT_INSECURE", insecure ? "1" : "0", 1) != 0) {
+		fprintf(stderr, "Failed to set FW_AUDIT_OUTPUT_INSECURE\n");
 		return 2;
 	}
 

@@ -64,6 +64,9 @@ run_exact_case "bios orom pull missing output target" 2 "$BIN" bios orom pull
 run_exact_case "efi orom pull invalid --output-http" 2 "$BIN" efi orom pull --output-http ftp://127.0.0.1:1/orom
 run_exact_case "bios orom pull invalid --output-https" 2 "$BIN" bios orom pull --output-https http://127.0.0.1:1/orom
 run_exact_case "efi orom pull both http+https" 2 "$BIN" efi orom pull --output-http http://127.0.0.1:1/orom --output-https https://127.0.0.1:1/orom
+run_exact_case "bios orom pull both http+https" 2 "$BIN" bios orom pull --output-http http://127.0.0.1:1/orom --output-https https://127.0.0.1:1/orom
+run_exact_case "efi orom pull extra positional arg" 2 "$BIN" efi orom pull extra
+run_exact_case "bios orom list extra positional arg" 2 "$BIN" bios orom list extra
 
 run_exact_case "efi orom invalid action" 2 "$BIN" efi orom invalid
 run_exact_case "bios orom invalid action" 2 "$BIN" bios orom invalid
@@ -82,6 +85,8 @@ run_accept_case "efi orom list --output-tcp" "$BIN" efi orom list --output-tcp 1
 run_accept_case "efi orom list --output-http" "$BIN" efi orom list --output-http http://127.0.0.1:1/orom
 run_accept_case "bios orom list --output-https" "$BIN" bios orom list --output-https https://127.0.0.1:1/orom
 run_accept_case "bios orom list --verbose" "$BIN" bios orom list --output-http http://127.0.0.1:1/orom --verbose
+run_accept_case "efi orom list --output-http" "$BIN" efi orom list --output-http http://127.0.0.1:1/orom
+run_accept_case "bios orom pull --insecure" "$BIN" --insecure bios orom pull --output-https https://127.0.0.1:1/orom
 
 run_accept_case "efi orom list with --output-format csv" "$BIN" --output-format csv efi orom list --output-http http://127.0.0.1:1/orom
 run_accept_case "bios orom list with --output-format json" "$BIN" --output-format json bios orom list --output-http http://127.0.0.1:1/orom

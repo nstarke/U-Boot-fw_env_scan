@@ -276,7 +276,7 @@ int linux_list_symlinks_scan_main(int argc, char **argv)
 	const char *output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
 	const char *output_uri = NULL;
 	const char *dir_path = "/";
-	bool insecure = false;
+	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
 	bool recursive = false;
 	int output_sock = -1;
 	struct stat st;

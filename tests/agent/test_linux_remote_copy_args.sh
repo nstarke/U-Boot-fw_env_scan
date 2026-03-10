@@ -65,10 +65,12 @@ run_exact_case "linux remote-copy relative path" 2 "$BIN" linux remote-copy ./re
 run_exact_case "linux remote-copy missing output target" 2 "$BIN" linux remote-copy "$TMP_FILE"
 run_exact_case "linux remote-copy invalid --output-http" 2 "$BIN" linux remote-copy "$TMP_FILE" --output-http ftp://127.0.0.1:1/file
 run_exact_case "linux remote-copy invalid --output-https" 2 "$BIN" linux remote-copy "$TMP_FILE" --output-https http://127.0.0.1:1/file
+run_exact_case "linux remote-copy invalid --output-tcp" 1 "$BIN" linux remote-copy "$TMP_FILE" --output-tcp invalid-target
 run_exact_case "linux remote-copy both http+https" 2 "$BIN" linux remote-copy "$TMP_FILE" --output-http http://127.0.0.1:1/file --output-https https://127.0.0.1:1/file
 run_exact_case "linux remote-copy multiple transport kinds" 2 "$BIN" linux remote-copy "$TMP_FILE" --output-tcp 127.0.0.1:9 --output-http http://127.0.0.1:1/file
 run_exact_case "linux remote-copy extra positional argument" 2 "$BIN" linux remote-copy "$TMP_FILE" /tmp/extra --output-tcp 127.0.0.1:9
 run_exact_case "linux remote-copy /proc without allow flag" 2 "$BIN" linux remote-copy /proc/cmdline --output-http http://127.0.0.1:1/upload
+run_exact_case "linux remote-copy /dev without allow flag" 2 "$BIN" linux remote-copy /dev/null --output-http http://127.0.0.1:1/upload
 
 TMP_SUBDIR="$TMP_DIR/subdir"
 mkdir -p "$TMP_SUBDIR"
@@ -83,10 +85,11 @@ run_accept_case "linux remote-copy directory http --allow-proc" "$BIN" linux rem
 run_accept_case "linux remote-copy --output-tcp" "$BIN" linux remote-copy "$TMP_FILE" --output-tcp 127.0.0.1:9
 run_accept_case "linux remote-copy --output-http" "$BIN" linux remote-copy "$TMP_FILE" --output-http http://127.0.0.1:1/upload
 run_accept_case "linux remote-copy --output-https" "$BIN" linux remote-copy "$TMP_FILE" --output-https https://127.0.0.1:1/upload
-run_accept_case "linux remote-copy --output-https --insecure" "$BIN" linux remote-copy "$TMP_FILE" --output-https https://127.0.0.1:1/upload --insecure
+run_accept_case "--insecure linux remote-copy --output-https" "$BIN" --insecure linux remote-copy "$TMP_FILE" --output-https https://127.0.0.1:1/upload
 run_accept_case "linux remote-copy --verbose" "$BIN" linux remote-copy "$TMP_FILE" --output-http http://127.0.0.1:1/upload --verbose
 run_accept_case "linux remote-copy directory http" "$BIN" linux remote-copy "$TMP_DIR" --output-http http://127.0.0.1:1/upload
 run_accept_case "linux remote-copy directory http --recursive" "$BIN" linux remote-copy "$TMP_DIR" --output-http http://127.0.0.1:1/upload --recursive
+run_accept_case "linux remote-copy directory https --recursive" "$BIN" linux remote-copy "$TMP_DIR" --output-https https://127.0.0.1:1/upload --recursive
 run_accept_case "linux remote-copy symlink http --allow-symlinks" "$BIN" linux remote-copy "$TMP_DIR/sample.link" --output-http http://127.0.0.1:1/upload --allow-symlinks
 
 if [ -d /dev ]; then

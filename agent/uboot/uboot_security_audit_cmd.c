@@ -849,7 +849,7 @@ int embedded_linux_audit_scan_main(int argc, char **argv)
 	const char *output_https_target = getenv("FW_AUDIT_OUTPUT_HTTPS");
 	const char *output_http_uri = NULL;
 	bool scan_signature_devices = false;
-	bool insecure = false;
+	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
 	uint64_t offset = 0;
 	uint64_t size = DEFAULT_AUDIT_SIZE;
 	bool size_explicit = false;

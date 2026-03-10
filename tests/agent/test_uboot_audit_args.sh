@@ -161,8 +161,26 @@ run_accept_case "uboot audit --output-http" \
 run_accept_case "uboot audit --output-https" \
     "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-https https://127.0.0.1:1/audit
 
-run_accept_case "uboot audit --insecure" \
-    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --insecure
+run_accept_case "--insecure uboot audit" \
+    "$BIN" --insecure uboot audit --dev /dev/null --size "$TEST_SIZE"
+
+run_exact_case "uboot audit invalid --size" 2 \
+    "$BIN" uboot audit --dev /dev/null --size nope
+
+run_exact_case "uboot audit invalid --offset" 2 \
+    "$BIN" uboot audit --dev /dev/null --offset nope --size "$TEST_SIZE"
+
+run_exact_case "uboot audit invalid --output-http" 2 \
+    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-http ftp://127.0.0.1:1/audit
+
+run_exact_case "uboot audit invalid --output-https" 2 \
+    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-https http://127.0.0.1:1/audit
+
+run_exact_case "uboot audit both http+https" 2 \
+    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --output-http http://127.0.0.1:1/audit --output-https https://127.0.0.1:1/audit
+
+run_accept_case "uboot audit unknown rule reaches no-match/root-prep path" \
+    "$BIN" uboot audit --dev /dev/null --size "$TEST_SIZE" --rule not_a_real_rule
 
 for output_format in txt csv json
 do

@@ -92,8 +92,10 @@ run_exact_case "linux list-files file path" 2 "$BIN" --verbose linux list-files 
 run_exact_case "linux list-files invalid --output-http" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --output-http ftp://127.0.0.1:1/file-list
 run_exact_case "linux list-files invalid --output-https" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --output-https http://127.0.0.1:1/file-list
 run_exact_case "linux list-files both http+https" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --output-http http://127.0.0.1:1/file-list --output-https https://127.0.0.1:1/file-list
+run_exact_case "linux list-files invalid --output-tcp" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --output-tcp invalid-target
 run_exact_case "linux list-files extra positional argument" 2 "$BIN" --verbose linux list-files "$TMP_DIR" /tmp/extra
 run_exact_case "linux list-files invalid --permissions" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --permissions invalid
+run_exact_case "linux list-files invalid symbolic --permissions" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --permissions u+
 run_exact_case "linux list-files invalid --user" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --user this-user-should-not-exist-fw-scan
 run_exact_case "linux list-files invalid --group" 2 "$BIN" --verbose linux list-files "$TMP_DIR" --group this-group-should-not-exist-fw-scan
 
@@ -108,7 +110,19 @@ run_exact_case "linux list-files --user" 0 "$BIN" --verbose linux list-files "$T
 run_exact_case "linux list-files --group" 0 "$BIN" --verbose linux list-files "$TMP_DIR" --group "$CURRENT_GROUP"
 run_accept_case "linux list-files --output-http" "$BIN" --verbose linux list-files "$TMP_DIR" --output-http http://127.0.0.1:1/file-list
 run_accept_case "linux list-files --output-https" "$BIN" --verbose linux list-files "$TMP_DIR" --output-https https://127.0.0.1:1/file-list
-run_accept_case "linux list-files --output-https --insecure" "$BIN" --verbose linux list-files "$TMP_DIR" --output-https https://127.0.0.1:1/file-list --insecure
+tcp_log="$(mktemp /tmp/test_list_files_tcp.XXXXXX)"
+"$BIN" --verbose linux list-files "$TMP_DIR" --output-tcp 127.0.0.1:9 >"$tcp_log" 2>&1
+rc=$?
+if [ "$rc" -eq 2 ] && grep -q "Invalid/failed output target (expected IPv4:port): 127.0.0.1:9" "$tcp_log"; then
+    echo "[PASS] linux list-files --output-tcp reaches TCP output validation path"
+    PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+else
+    echo "[FAIL] linux list-files --output-tcp reaches TCP output validation path (rc=$rc)"
+    sed -n '1,80p' "$tcp_log"
+    FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+fi
+rm -f "$tcp_log"
+run_accept_case "--insecure linux list-files --output-https" "$BIN" --insecure --verbose linux list-files "$TMP_DIR" --output-https https://127.0.0.1:1/file-list
 
 run_accept_case "linux list-files with --output-format txt" "$BIN" --output-format txt --verbose linux list-files "$TMP_DIR"
 run_accept_case "linux list-files with --output-format csv" "$BIN" --output-format csv --verbose linux list-files "$TMP_DIR"

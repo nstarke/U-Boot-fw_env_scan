@@ -6,3 +6,4 @@ release_binaries
 node_modules
 api/data/*
 *.log   
+embedded_linux_audit

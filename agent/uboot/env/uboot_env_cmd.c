@@ -1452,7 +1452,7 @@ int uboot_env_scan_core_main(int argc, char **argv)
 	detect_output_format();
 	g_verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
 	g_bruteforce = false;
-	g_insecure = false;
+	g_insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
 	g_csv_header_emitted = false;
 	g_parse_vars = false;
 

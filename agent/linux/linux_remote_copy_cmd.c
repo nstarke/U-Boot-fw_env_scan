@@ -372,7 +372,7 @@ int linux_remote_copy_scan_main(int argc, char **argv)
 	bool allow_sysfs = false;
 	bool allow_proc = false;
 	bool allow_symlinks = false;
-	bool insecure = false;
+	bool insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
 	bool verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
 	int opt;
 

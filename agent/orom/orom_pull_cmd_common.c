@@ -486,6 +486,7 @@ int orom_group_main(const char *fw_mode, int argc, char **argv)
 	memset(&ctx, 0, sizeof(ctx));
 	ctx.fw_mode = fw_mode;
 	ctx.verbose = getenv("FW_AUDIT_VERBOSE") && !strcmp(getenv("FW_AUDIT_VERBOSE"), "1");
+	ctx.insecure = getenv("FW_AUDIT_OUTPUT_INSECURE") && !strcmp(getenv("FW_AUDIT_OUTPUT_INSECURE"), "1");
 	ctx.output_tcp = getenv("FW_AUDIT_OUTPUT_TCP");
 	ctx.output_http = getenv("FW_AUDIT_OUTPUT_HTTP");
 	ctx.output_https = getenv("FW_AUDIT_OUTPUT_HTTPS");
