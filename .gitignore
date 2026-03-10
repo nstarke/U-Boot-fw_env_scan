@@ -4,5 +4,5 @@ generated/
 __pycache__
 release_binaries
 node_modules
-web/data/*
+api/data/*
 *.log   

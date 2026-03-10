@@ -3,7 +3,7 @@
 This repository includes shell-based argument coverage tests under `tests/agent/`.
 
 - `tests/agent/` contains the existing agent shell tests.
-- `tests/web/` is reserved for web-related tests.
+- `tests/api/` is reserved for api-related tests.
 
 ## Prerequisites
 
@@ -82,7 +82,7 @@ Set only one of them at a time.
 
 ## Download helper for release-binary test runs
 
-`tests/agent/download_tests.sh` can download test scripts and a selected release binary from a web server.
+`tests/agent/download_tests.sh` can download test scripts and a selected release binary from a api server.
 
 List supported ISAs (derived from `tools/release_binaries/embedded_linux_audit-*`):
 

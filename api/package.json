@@ -1,8 +1,8 @@
 {
-  "name": "fw-env-scan-web-helper",
+  "name": "embedded_linux_audit-agent_api_helper",
   "version": "1.0.0",
   "private": true,
-  "description": "ExpressJS equivalent of tools/web_server_helper.py",
+  "description": "ExpressJS equivalent of tools/api_server_helper.py",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

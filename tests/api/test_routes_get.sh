@@ -5,12 +5,12 @@ set -u
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# shellcheck source=tests/web/common.sh
+# shellcheck source=tests/api/common.sh
 . "$SCRIPT_DIR/common.sh"
 
 setup_web_test_env "$REPO_ROOT" 5310
 
-print_section "web GET route coverage"
+print_section "api GET route coverage"
 
 SCRIPT_BODY="$(printf '#!/bin/sh\necho test-one')"
 
@@ -18,7 +18,7 @@ run_curl_body_contains_case "GET / includes release binaries" GET "$TEST_WEB_BAS
 run_curl_body_contains_case "GET / includes agent test scripts" GET "$TEST_WEB_BASE_URL/" 200 "tests/agent/test_one.sh"
 run_curl_case "GET /tests/agent/test_one.sh" GET "$TEST_WEB_BASE_URL/tests/agent/test_one.sh" 200 "$SCRIPT_BODY"
 run_curl_case "GET /tests/agent/..%2Fescape rejects invalid segment" GET "$TEST_WEB_BASE_URL/tests/agent/..%2Fescape" 400 "invalid path"
-run_curl_case "GET /tests/web/test_two.sh returns 404" GET "$TEST_WEB_BASE_URL/tests/web/test_two.sh" 404 "not found"
+run_curl_case "GET /tests/api/test_two.sh returns 404" GET "$TEST_WEB_BASE_URL/tests/api/test_two.sh" 404 "not found"
 run_curl_case "GET /tests/agent/missing.sh returns 404" GET "$TEST_WEB_BASE_URL/tests/agent/missing.sh" 404 "not found"
 run_curl_case "GET /tests/agent/not_a_file returns 400" GET "$TEST_WEB_BASE_URL/tests/agent/not_a_file" 400 "invalid path"
 run_curl_case "GET /tests/agent/test_one rejects missing .sh suffix" GET "$TEST_WEB_BASE_URL/tests/agent/test_one" 400 "invalid path"

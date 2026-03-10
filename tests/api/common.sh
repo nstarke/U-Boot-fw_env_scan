@@ -49,7 +49,7 @@ require_web_test_tools() {
 
 create_web_test_layout() {
     TEST_WEB_TMPDIR="$(mktemp -d /tmp/fw_web_tests.XXXXXX)"
-    mkdir -p "$TEST_WEB_TMPDIR/assets" "$TEST_WEB_TMPDIR/data/env" "$TEST_WEB_TMPDIR/tests/agent" "$TEST_WEB_TMPDIR/tests/web"
+    mkdir -p "$TEST_WEB_TMPDIR/assets" "$TEST_WEB_TMPDIR/data/env" "$TEST_WEB_TMPDIR/tests/agent" "$TEST_WEB_TMPDIR/tests/api"
 
     printf 'asset-one\n' > "$TEST_WEB_TMPDIR/assets/embedded_linux_audit-arm64"
     printf 'asset-two\n' > "$TEST_WEB_TMPDIR/assets/custom-tool.bin"
@@ -57,8 +57,8 @@ create_web_test_layout() {
     mkdir -p "$TEST_WEB_TMPDIR/assets/not_a_file"
 
     printf '#!/bin/sh\necho test-one\n' > "$TEST_WEB_TMPDIR/tests/agent/test_one.sh"
-    printf '#!/bin/sh\necho test-two\n' > "$TEST_WEB_TMPDIR/tests/web/test_two.sh"
-    chmod +x "$TEST_WEB_TMPDIR/tests/agent/test_one.sh" "$TEST_WEB_TMPDIR/tests/web/test_two.sh"
+    printf '#!/bin/sh\necho test-two\n' > "$TEST_WEB_TMPDIR/tests/api/test_two.sh"
+    chmod +x "$TEST_WEB_TMPDIR/tests/agent/test_one.sh" "$TEST_WEB_TMPDIR/tests/api/test_two.sh"
     mkdir -p "$TEST_WEB_TMPDIR/tests/not_a_file" "$TEST_WEB_TMPDIR/tests/agent/not_a_file"
 
     printf 'bootdelay=3\n' > "$TEST_WEB_TMPDIR/data/env/fw_env.txt"
@@ -78,7 +78,7 @@ const path = require('path');
 const repoRoot = process.env.REPO_ROOT;
 const tmpDir = process.env.TEST_WEB_TMPDIR;
 const port = Number(process.env.TEST_WEB_PORT);
-const { createApp } = require(path.join(repoRoot, 'web', 'server.js'));
+const { createApp } = require(path.join(repoRoot, 'api', 'server.js'));
 
 const app = createApp({
   logPrefix: path.join(tmpDir, 'post_requests'),

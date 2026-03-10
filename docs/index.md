@@ -11,5 +11,5 @@
 - [`embedded_linux_audit bios orom` Command](bios-command.md)
 - [Audit Rules Reference](audit-rules.md)
 - [Tests](tests.md)
-- [Web Helper Server](web-helper-server.md)
+- [API Helper Server](api-helper-server.md)
 - [Notes and Cautions](notes-and-cautions.md)
