@@ -2,8 +2,9 @@ const { isSafeRelativePath } = require('./shared');
 
 module.exports = function registerTestsRoute(app, deps) {
   const { testsDir, fsp, isWithinRoot, verboseRequestLog, verboseResponseLog } = deps;
+  const testsRoute = /^\/tests\/(.+)$/;
 
-  app.get('/tests/*', async (req, res) => {
+  app.get(testsRoute, async (req, res) => {
     verboseRequestLog(req);
     const requestedPath = req.params[0];
     if (!isSafeRelativePath(requestedPath)) {
