@@ -3,6 +3,65 @@ CFLAGS  ?= -O2 -Wall -Wextra
 LDFLAGS ?=
 LDLIBS  ?=
 
+COMPAT_CPU ?=
+COMPAT_CFLAGS :=
+
+ifeq ($(COMPAT_CPU),generic)
+COMPAT_CFLAGS +=
+else ifeq ($(COMPAT_CPU),x86)
+COMPAT_CFLAGS += -march=i686
+else ifeq ($(COMPAT_CPU),x86_64)
+COMPAT_CFLAGS += -march=x86-64
+else ifeq ($(COMPAT_CPU),arm32)
+COMPAT_CFLAGS += -march=armv5te -marm
+else ifeq ($(COMPAT_CPU),arm32hf)
+COMPAT_CFLAGS += -march=armv6 -marm -mfloat-abi=hard
+else ifeq ($(COMPAT_CPU),armeb)
+COMPAT_CFLAGS += -march=armv5te -marm
+else ifeq ($(COMPAT_CPU),armebhf)
+COMPAT_CFLAGS += -march=armv6 -marm -mfloat-abi=hard
+else ifeq ($(COMPAT_CPU),aarch64)
+COMPAT_CFLAGS += -march=armv8-a
+else ifeq ($(COMPAT_CPU),aarch64_be)
+COMPAT_CFLAGS += -march=armv8-a
+else ifeq ($(COMPAT_CPU),mips)
+COMPAT_CFLAGS += -march=mips32 -msoft-float
+else ifeq ($(COMPAT_CPU),mipshf)
+COMPAT_CFLAGS += -march=mips32 -mhard-float
+else ifeq ($(COMPAT_CPU),mipsel)
+COMPAT_CFLAGS += -march=mips32 -msoft-float
+else ifeq ($(COMPAT_CPU),mipselhf)
+COMPAT_CFLAGS += -march=mips32 -mhard-float
+else ifeq ($(COMPAT_CPU),mips64)
+COMPAT_CFLAGS += -march=mips64r2 -mabi=64
+else ifeq ($(COMPAT_CPU),mips64el)
+COMPAT_CFLAGS += -march=mips64r2 -mabi=64
+else ifeq ($(COMPAT_CPU),mips64n32)
+COMPAT_CFLAGS += -march=mips64r2 -mabi=n32
+else ifeq ($(COMPAT_CPU),mips64eln32)
+COMPAT_CFLAGS += -march=mips64r2 -mabi=n32
+else ifeq ($(COMPAT_CPU),powerpc)
+COMPAT_CFLAGS += -mcpu=powerpc -mno-altivec
+else ifeq ($(COMPAT_CPU),powerpchf)
+COMPAT_CFLAGS += -mcpu=powerpc -mhard-float -mno-altivec
+else ifeq ($(COMPAT_CPU),powerpc64)
+COMPAT_CFLAGS += -mcpu=powerpc64 -mno-altivec
+else ifeq ($(COMPAT_CPU),powerpc64le)
+COMPAT_CFLAGS += -mcpu=powerpc64 -mno-altivec
+else ifeq ($(COMPAT_CPU),riscv32)
+COMPAT_CFLAGS += -march=rv32imac -mabi=ilp32
+else ifeq ($(COMPAT_CPU),riscv64)
+COMPAT_CFLAGS += -march=rv64gc -mabi=lp64d
+else ifeq ($(COMPAT_CPU),s390x)
+COMPAT_CFLAGS += -march=z10
+else ifeq ($(COMPAT_CPU),sparc64)
+COMPAT_CFLAGS += -mcpu=ultrasparc
+else ifeq ($(COMPAT_CPU),loongarch64)
+COMPAT_CFLAGS += -march=loongarch64
+else ifneq ($(strip $(COMPAT_CPU)),)
+$(error Unsupported COMPAT_CPU '$(COMPAT_CPU)')
+endif
+
 ELA_USE_READLINE ?= 1
 
 ifneq (,$(findstring zig cc,$(CC)))
@@ -11,7 +70,8 @@ endif
 
 empty :=
 space := $(empty) $(empty)
-CC_TAG := $(subst $(space),_,$(CC))
+compat_tag = $(if $(strip $(COMPAT_CPU)),$(COMPAT_CPU),default)
+CC_TAG := $(subst $(space),_,$(CC))-$(compat_tag)
 
 CMAKE_C_COMPILER ?= $(CC)
 CMAKE_C_COMPILER_ARG1 ?=
@@ -46,6 +106,9 @@ endif
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 CMAKE_CC_ARGS += -DCMAKE_C_COMPILER_TARGET=$(CMAKE_C_COMPILER_TARGET)
 endif
+ifneq ($(strip $(COMPAT_CFLAGS)),)
+CMAKE_CC_ARGS += -DCMAKE_C_FLAGS=$(COMPAT_CFLAGS)
+endif
 
 LIBCSV_DIR    := third_party/libcsv
 LIBCSV_SRC    := $(LIBCSV_DIR)/libcsv.c
@@ -58,7 +121,7 @@ ZLIB_DIR      := third_party/zlib
 ZLIB_BUILD    := $(ZLIB_DIR)/build-$(CC_TAG)
 ZLIB_LIB      := $(ZLIB_BUILD)/libz.a
 ZLIB_CFLAGS   := -I$(ZLIB_DIR) -I$(ZLIB_BUILD)
-LIBUBOOTENV_EXTRA_CFLAGS := -I$(abspath compat) -I$(abspath $(ZLIB_DIR)) -I$(abspath $(ZLIB_BUILD)) -Wno-switch
+LIBUBOOTENV_EXTRA_CFLAGS := -I$(abspath compat) -I$(abspath $(ZLIB_DIR)) -I$(abspath $(ZLIB_BUILD)) -Wno-switch $(COMPAT_CFLAGS)
 JSONC_DIR     := third_party/json-c
 JSONC_BUILD   := $(JSONC_DIR)/build-$(CC_TAG)
 JSONC_LIB     := $(JSONC_BUILD)/libjson-c.a
@@ -94,6 +157,7 @@ CFLAGS += $(ZLIB_CFLAGS)
 CFLAGS += $(JSONC_CFLAGS)
 CFLAGS += $(CURL_CFLAGS)
 CFLAGS += $(OPENSSL_CFLAGS)
+CFLAGS += $(COMPAT_CFLAGS)
 CFLAGS += -I.
 CFLAGS += -Iagent
 
@@ -142,7 +206,7 @@ $(OPENSSL_LIB):
 	mkdir -p $(OPENSSL_BUILD)
 	cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	# Use no-asm so cross builds (e.g. zig cc -target arm-*) don't pick host x86 asm paths.
-	cd $(OPENSSL_DIR) && CC="$(CC)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-threads no-tests no-docs --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
+	cd $(OPENSSL_DIR) && CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" ./Configure $(OPENSSL_CONFIGURE_TARGET) no-asm no-shared no-module no-threads no-tests no-docs --prefix="$(abspath $(OPENSSL_INSTALL))" --openssldir="$(abspath $(OPENSSL_INSTALL))/ssl" --libdir=lib
 	$(MAKE) -C $(OPENSSL_DIR) build_libs
 	mkdir -p "$(OPENSSL_INSTALL)/include" "$(OPENSSL_INSTALL)/lib"
 	rm -rf "$(OPENSSL_INSTALL)/include/openssl"
