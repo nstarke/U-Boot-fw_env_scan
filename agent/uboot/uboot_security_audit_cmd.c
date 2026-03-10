@@ -290,6 +290,8 @@ static int ensure_fw_env_config_exists(bool force_scan, bool verbose)
 	char *env_argv[9];
 	int env_argc = 0;
 
+	(void)verbose;
+
 	env_argv[env_argc++] = "env";
 	env_argv[env_argc++] = "--output-config=fw_env.config";
 	if (output_tcp && *output_tcp) {
