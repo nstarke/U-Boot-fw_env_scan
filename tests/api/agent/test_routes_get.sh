@@ -42,4 +42,42 @@ run_curl_case "GET /scripts/not_a_file returns 404" GET "$TEST_WEB_BASE_URL/scri
 run_curl_case "GET /not_a_file returns 404" GET "$TEST_WEB_BASE_URL/not_a_file" 404 "not found"
 run_curl_case "GET /missing-asset returns 404" GET "$TEST_WEB_BASE_URL/missing-asset" 404 "not found"
 
+REPO_ROOT="$REPO_ROOT" node - <<'NODE' >/tmp/fw_route_fallback.log 2>&1 &
+const http = require('http');
+const path = require('path');
+const repoRoot = process.env.REPO_ROOT;
+const { createApp } = require(path.join(repoRoot, 'api', 'agent', 'server.js'));
+
+const app = createApp({
+  logPrefix: path.join('/tmp', 'fw_route_fallback_post_requests'),
+  assetsDir: path.join('/tmp', 'fw_route_fallback_assets'),
+  dataDir: path.join('/tmp', 'fw_route_fallback_data'),
+  testsDir: path.join('/tmp', 'fw_route_fallback_missing_tests'),
+  verbose: false
+});
+
+const server = http.createServer(app);
+server.listen(5312, '127.0.0.1', () => {
+  process.stdout.write('ready\n');
+});
+
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
+process.on('SIGINT', () => server.close(() => process.exit(0)));
+NODE
+FALLBACK_PID=$!
+
+i=0
+while [ "$i" -lt 50 ]; do
+    if grep -q '^ready$' /tmp/fw_route_fallback.log 2>/dev/null; then
+        break
+    fi
+    sleep 0.1
+    i=$(expr "$i" + 1)
+done
+
+run_curl_body_contains_case "GET /tests/agent/download_tests.sh falls back to repo tests dir" GET "http://127.0.0.1:5312/tests/agent/download_tests.sh" 200 "usage: \$0 --webserver <url>"
+
+kill "$FALLBACK_PID" 2>/dev/null || true
+wait "$FALLBACK_PID" 2>/dev/null || true
+
 finish_web_tests

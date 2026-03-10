@@ -2,7 +2,16 @@ const { isSafeSinglePathSegment } = require('./shared');
 
 module.exports = function registerTestsRoute(app, deps) {
   const { testsDir, fsp, isWithinRoot, verboseRequestLog, verboseResponseLog } = deps;
-  const agentTestsDir = deps.path.join(testsDir, 'agent');
+  const configuredAgentTestsDir = deps.path.join(testsDir, 'agent');
+  const repoAgentTestsDir = deps.path.resolve(__dirname, '..', '..', '..', 'tests', 'agent');
+
+  function getAgentTestDirs() {
+    const dirs = [configuredAgentTestsDir];
+    if (repoAgentTestsDir !== configuredAgentTestsDir) {
+      dirs.push(repoAgentTestsDir);
+    }
+    return dirs;
+  }
 
   app.get('/tests/agent/:name', async (req, res) => {
     verboseRequestLog(req);
@@ -12,22 +21,26 @@ module.exports = function registerTestsRoute(app, deps) {
       verboseResponseLog(req, 400, 13);
       return;
     }
-    const candidate = deps.path.resolve(agentTestsDir, requestedPath);
-    if (!isWithinRoot(candidate, agentTestsDir)) {
-      res.status(404).type('text').send('not found\n');
-      verboseResponseLog(req, 404, 10);
-      return;
-    }
-    try {
-      const stat = await fsp.stat(candidate);
-      if (!stat.isFile()) {
-        throw new Error('not a file');
+
+    for (const agentTestsDir of getAgentTestDirs()) {
+      const candidate = deps.path.resolve(agentTestsDir, requestedPath);
+      if (!isWithinRoot(candidate, agentTestsDir)) {
+        continue;
       }
-      res.sendFile(candidate);
-    } catch {
-      res.status(404).type('text').send('not found\n');
-      verboseResponseLog(req, 404, 10);
+      try {
+        const stat = await fsp.stat(candidate);
+        if (!stat.isFile()) {
+          continue;
+        }
+        res.sendFile(candidate);
+        return;
+      } catch {
+        // Try the next known agent test directory.
+      }
     }
+
+    res.status(404).type('text').send('not found\n');
+    verboseResponseLog(req, 404, 10);
   });
 
   app.get('/tests/*', (req, res) => {

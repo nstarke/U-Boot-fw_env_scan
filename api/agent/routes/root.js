@@ -2,21 +2,34 @@ const { listBinaryEntries } = require('./shared');
 
 module.exports = function registerRootRoute(app, deps) {
   const { testsDir, scriptsDir, fsp, verboseRequestLog, verboseResponseLog } = deps;
-  const agentTestsDir = deps.path.join(testsDir, 'agent');
+  const configuredAgentTestsDir = deps.path.join(testsDir, 'agent');
+  const repoAgentTestsDir = deps.path.resolve(__dirname, '..', '..', '..', 'tests', 'agent');
 
-  async function listAgentTestEntries(dir) {
-    const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
-    const tests = entries.map((entry) => {
-      if (entry.isFile() && entry.name.endsWith('.sh')) {
-        return [{
+  function getAgentTestDirs() {
+    const dirs = [configuredAgentTestsDir];
+    if (repoAgentTestsDir !== configuredAgentTestsDir) {
+      dirs.push(repoAgentTestsDir);
+    }
+    return dirs;
+  }
+
+  async function listAgentTestEntries(dirs) {
+    const byName = new Map();
+
+    for (const dir of dirs) {
+      const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.sh') || byName.has(entry.name)) {
+          continue;
+        }
+        byName.set(entry.name, {
           name: entry.name,
           url: `/tests/agent/${encodeURIComponent(entry.name)}`
-        }];
+        });
       }
-      return [];
-    });
+    }
 
-    return tests.flat().sort((a, b) => a.name.localeCompare(b.name));
+    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async function listScriptEntries(dir) {
@@ -42,7 +55,8 @@ module.exports = function registerRootRoute(app, deps) {
   app.get('/', async (req, res) => {
     verboseRequestLog(req);
     const binaryEntries = await listBinaryEntries(deps.assetsDir, fsp, deps.releaseStateFile);
-    const testEntries = await listAgentTestEntries(agentTestsDir);
+    const agentTestDirs = getAgentTestDirs();
+    const testEntries = await listAgentTestEntries(agentTestDirs);
     const scriptEntries = await listScriptEntries(scriptsDir);
 
     const assetItems = binaryEntries.length
@@ -71,7 +85,7 @@ ${assetItems}
     </ul>
 
     <h1>Test Scripts</h1>
-    <p>Serving agent scripts from: ${escapeHtml(agentTestsDir)}</p>
+    <p>Serving agent scripts from: ${escapeHtml(agentTestDirs.join(', '))}</p>
     <ul>
 ${testItems}
     </ul>
