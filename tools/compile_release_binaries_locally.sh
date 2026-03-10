@@ -330,6 +330,7 @@ print_summary() {
 main() {
   require_file "${ROOT_DIR}/agent/embedded_linux_audit.c"
   require_file "${ROOT_DIR}/agent/embedded_linux_audit_cmd.h"
+  require_file "${ROOT_DIR}/third_party/libefivar/src/include/efivar/efivar.h"
   require_file "${ROOT_DIR}/third_party/ncurses/configure"
   require_file "${ROOT_DIR}/third_party/readline/readline.h"
 

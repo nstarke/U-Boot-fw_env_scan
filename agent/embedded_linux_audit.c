@@ -58,6 +58,7 @@ static const char *const interactive_group_linux[] = {
 
 static const char *const interactive_group_efi[] = {
 	"orom",
+	"dump-vars",
 	NULL,
 };
 
@@ -136,6 +137,7 @@ static void interactive_usage(const char *prog)
 	       "  linux list-symlinks\n"
 	       "  linux remote-copy\n"
 	       "  efi orom\n"
+	       "  efi dump-vars\n"
 	       "  bios orom\n"
 	       "\n"
 	       "Examples:\n"
@@ -860,6 +862,7 @@ static void usage(const char *prog)
 		"  linux list-symlinks List symlinks under a directory (use --recursive to recurse)\n"
 		"  linux remote-copy  Copy a local file to remote destination\n"
 		"  efi orom           EFI option ROM utilities (pull/list)\n"
+		"  efi dump-vars      Dump EFI variables with txt/csv/json formatting\n"
 		"  bios orom          BIOS option ROM utilities (pull/list)\n"
 		"\n"
 		"Interactive-only helper:\n"
@@ -877,9 +880,10 @@ static void usage(const char *prog)
 		"  %s --output-format json --output-http http://127.0.0.1:5000 linux list-symlinks /etc --recursive\n"
 		"  %s --output-https https://127.0.0.1:5443 linux remote-copy /tmp/fw.bin\n"
 		"  %s --quiet --output-http http://127.0.0.1:5000/orom efi orom pull\n"
+		"  %s --output-format json --output-http http://127.0.0.1:5000 efi dump-vars\n"
 		"  %s --quiet --output-tcp 127.0.0.1:5001 bios orom list\n"
 		"  %s --output-format json --script ./commands.txt\n",
-		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
+		prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 static bool is_http_script_source(const char *value)
@@ -1408,6 +1412,8 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 
 		if (!strcmp(argv[sub_idx], "orom"))
 			ret = efi_orom_main(argc - sub_idx, argv + sub_idx);
+		else if (!strcmp(argv[sub_idx], "dump-vars"))
+			ret = efi_dump_vars_main(argc - sub_idx, argv + sub_idx);
 		else {
 			fprintf(stderr, "Unknown efi subcommand: %s\n\n", argv[sub_idx]);
 			usage(argv[0]);

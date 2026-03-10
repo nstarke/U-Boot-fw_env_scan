@@ -1,6 +1,22 @@
-# `embedded_linux_audit efi orom` Command
+# `embedded_linux_audit efi` Commands
 
-EFI option ROM utilities for listing and pulling payloads from PCI sysfs ROM nodes.
+EFI utilities for dumping variables and working with PCI sysfs option ROM nodes.
+
+## `efi dump-vars`
+
+Enumerate EFI variables available through efivarfs/libefivar and emit them in the selected top-level `--output-format`.
+
+- supported output formats: `txt`, `csv`, and `json`
+- when top-level `--output-http` or `--output-https` is configured, results are POSTed to `/:mac/upload/efi-vars`
+- when top-level `--output-tcp` is configured, formatted records are streamed over TCP as they are emitted
+
+Each emitted record includes:
+
+- variable GUID
+- variable name
+- EFI attribute bitmask
+- payload size
+- payload bytes as lowercase hexadecimal
 
 ## `efi orom` subcommands
 
@@ -23,6 +39,9 @@ EFI option ROM utilities for listing and pulling payloads from PCI sysfs ROM nod
 ## Examples
 
 ```bash
+./embedded_linux_audit efi dump-vars
+./embedded_linux_audit --output-format csv efi dump-vars
+./embedded_linux_audit --output-format json --output-http http://192.168.1.50:5000 efi dump-vars
 ./embedded_linux_audit --output-tcp 192.168.1.50:5000 efi orom pull
 ./embedded_linux_audit --output-http http://192.168.1.50:5000/orom efi orom pull
 ./embedded_linux_audit --insecure --output-https https://192.168.1.50:5443/orom efi orom pull

@@ -144,6 +144,10 @@ LIBUBOOTENV_DIR := third_party/libubootenv
 LIBUBOOTENV_BUILD := $(LIBUBOOTENV_DIR)/build-$(CC_TAG)
 LIBUBOOTENV_LIB := $(LIBUBOOTENV_BUILD)/src/libubootenv.a
 LIBUBOOTENV_CFLAGS := -I$(LIBUBOOTENV_DIR)/src
+LIBEFIVAR_DIR := third_party/libefivar
+LIBEFIVAR_BUILD_STAMP := $(LIBEFIVAR_DIR)/.ela-build-$(CC_TAG)
+LIBEFIVAR_LIB := $(LIBEFIVAR_DIR)/src/libefivar.a
+LIBEFIVAR_CFLAGS := -I$(LIBEFIVAR_DIR)/src/include
 ZLIB_DIR      := third_party/zlib
 ZLIB_BUILD    := $(ZLIB_DIR)/build-$(CC_TAG)
 ZLIB_LIB      := $(ZLIB_BUILD)/libz.a
@@ -192,6 +196,7 @@ endif
 
 CFLAGS += $(LIBCSV_CFLAGS)
 CFLAGS += $(LIBUBOOTENV_CFLAGS)
+CFLAGS += $(LIBEFIVAR_CFLAGS)
 CFLAGS += $(ZLIB_CFLAGS)
 CFLAGS += $(JSONC_CFLAGS)
 CFLAGS += $(CURL_CFLAGS)
@@ -199,6 +204,7 @@ CFLAGS += $(OPENSSL_CFLAGS)
 CFLAGS += $(COMPAT_CFLAGS)
 CFLAGS += -I.
 CFLAGS += -Iagent
+LDLIBS += -ldl
 
 ifeq ($(ELA_USE_READLINE),1)
 CFLAGS += -DELA_HAS_READLINE -I$(READLINE_DIR)
@@ -209,7 +215,7 @@ READLINE_DEPS :=
 endif
 
 TARGET := embedded_linux_audit
-SRC    := agent/embedded_linux_audit.c agent/uboot/env/uboot_env_cmd.c agent/uboot/env/uboot_env_read_vars_cmd.c agent/uboot/env/uboot_env_write_vars_cmd.c agent/uboot/uboot_image_cmd.c agent/uboot/image/uboot_image_pull_cmd.c agent/uboot/image/uboot_image_find_address_cmd.c agent/uboot/image/uboot_image_list_commands_cmd.c agent/uboot/uboot_security_audit_cmd.c agent/linux/linux_dmesg_cmd.c agent/linux/linux_execute_command_cmd.c agent/linux/linux_grep_cmd.c agent/linux/linux_list_files_cmd.c agent/linux/linux_list_symlinks_cmd.c agent/linux/linux_remote_copy_cmd.c agent/orom/orom_pull_cmd_common.c agent/efi/efi_pull_orom_cmd.c agent/bios/bios_pull_orom_cmd.c agent/embedded_linux_audit_cmd.c \
+SRC    := agent/embedded_linux_audit.c agent/uboot/env/uboot_env_cmd.c agent/uboot/env/uboot_env_read_vars_cmd.c agent/uboot/env/uboot_env_write_vars_cmd.c agent/uboot/uboot_image_cmd.c agent/uboot/image/uboot_image_pull_cmd.c agent/uboot/image/uboot_image_find_address_cmd.c agent/uboot/image/uboot_image_list_commands_cmd.c agent/uboot/uboot_security_audit_cmd.c agent/linux/linux_dmesg_cmd.c agent/linux/linux_execute_command_cmd.c agent/linux/linux_grep_cmd.c agent/linux/linux_list_files_cmd.c agent/linux/linux_list_symlinks_cmd.c agent/linux/linux_remote_copy_cmd.c agent/orom/orom_pull_cmd_common.c agent/efi/efi_pull_orom_cmd.c agent/efi/efi_dump_vars_cmd.c agent/bios/bios_pull_orom_cmd.c agent/embedded_linux_audit_cmd.c \
 	  agent/uboot/audit-rules/uboot_validate_crc32_rule.c \
 	  agent/uboot/audit-rules/uboot_validate_cmdline_init_writeability_rule.c \
 	  agent/uboot/audit-rules/uboot_validate_env_security_rule.c \
@@ -236,6 +242,12 @@ $(JSONC_LIB):
 $(LIBUBOOTENV_LIB): $(ZLIB_LIB)
 	cmake -S $(LIBUBOOTENV_DIR) -B $(LIBUBOOTENV_BUILD) $(CMAKE_CC_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_DOC=OFF -DNO_YML_SUPPORT=ON -DCMAKE_C_FLAGS="$(LIBUBOOTENV_EXTRA_CFLAGS)"
 	cmake --build $(LIBUBOOTENV_BUILD) --parallel $(JOBS) --target ubootenv_static
+
+$(LIBEFIVAR_BUILD_STAMP):
+	-$(MAKE) -C $(LIBEFIVAR_DIR)/src TOPDIR='$(abspath $(LIBEFIVAR_DIR))' clean >/dev/null 2>&1 || true
+	$(MAKE) -C $(LIBEFIVAR_DIR)/src TOPDIR='$(abspath $(LIBEFIVAR_DIR))' libefivar.a CC='$(CC)' HOSTCC='cc' HOSTCCLD='cc' AR='ar' RANLIB='ranlib' CFLAGS='$(COMPAT_CFLAGS)' CPPFLAGS='-I$(abspath $(LIBEFIVAR_DIR))/src/include'
+	test -f $(LIBEFIVAR_LIB)
+	touch $@
 
 $(ZLIB_LIB):
 	cmake -S $(ZLIB_DIR) -B $(ZLIB_BUILD) $(ZLIB_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DZLIB_BUILD_SHARED=OFF -DZLIB_BUILD_STATIC=ON -DZLIB_BUILD_TESTING=OFF -DZLIB_INSTALL=OFF
@@ -280,8 +292,8 @@ $(READLINE_BUILD_STAMP):
 	$(MAKE) -C $(READLINE_DIR) -j$(JOBS) libreadline.a libhistory.a
 	touch $@
 
-$(TARGET): $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
-	$(CC) $(CFLAGS) -o $@ $(SRC) $(LIBUBOOTENV_LIB) $(ZLIB_LIB) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_LIB) $(LDFLAGS) $(LDLIBS)
+$(TARGET): $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_BUILD_STAMP) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
+	$(CC) $(CFLAGS) -o $@ $(SRC) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_LIB) $(ZLIB_LIB) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_LIB) $(LDFLAGS) $(LDLIBS)
 
 static: LDFLAGS += -static
 static: all
@@ -294,6 +306,8 @@ clean:
 	rm -rf $(GENERATED_DIR)
 	rm -rf $(JSONC_DIR)/build*
 	rm -rf $(LIBUBOOTENV_DIR)/build*
+	-$(MAKE) -C $(LIBEFIVAR_DIR)/src TOPDIR='$(abspath $(LIBEFIVAR_DIR))' clean >/dev/null 2>&1 || true
+	rm -f $(LIBEFIVAR_BUILD_STAMP)
 	rm -rf $(ZLIB_DIR)/build*
 	rm -rf $(CURL_DIR)/build*
 	-cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true

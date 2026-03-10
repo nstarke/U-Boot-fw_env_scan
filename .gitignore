@@ -9,3 +9,4 @@ api/agent/data/*
 embedded_linux_audit
 logs
 .tools
+.build-release-static

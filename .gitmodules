@@ -25,3 +25,6 @@
 [submodule "third_party/ncurses"]
 	path = third_party/ncurses
 	url = https://github.com/mirror/ncurses.git
+[submodule "third_party/libefivar"]
+	path = third_party/libefivar
+	url = https://github.com/rhboot/efivar.git
