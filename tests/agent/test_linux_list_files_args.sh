@@ -129,7 +129,7 @@ run_accept_case "linux list-files with --output-format csv" "$BIN" --output-form
 run_accept_case "linux list-files with --output-format json" "$BIN" --output-format json linux list-files "$TMP_DIR"
 
 local_log="$(mktemp /tmp/test_list_files_local.XXXXXX)"
-"$BIN" linux list-files "$TMP_DIR" >"$local_log" 2>&1
+run_with_output_override "$BIN" linux list-files "$TMP_DIR" >"$local_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$local_log" && ! file_has_exact_line "$TMP_FILE" "$local_log"; then
     echo "[PASS] linux list-files default listing stays non-recursive"
@@ -142,7 +142,7 @@ fi
 rm -f "$local_log"
 
 recursive_log="$(mktemp /tmp/test_list_files_recursive.XXXXXX)"
-"$BIN" linux list-files "$TMP_DIR" --recursive >"$recursive_log" 2>&1
+run_with_output_override "$BIN" linux list-files "$TMP_DIR" --recursive >"$recursive_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$recursive_log" && file_has_exact_line "$TMP_FILE" "$recursive_log"; then
     echo "[PASS] linux list-files --recursive includes nested files"
@@ -155,7 +155,7 @@ fi
 rm -f "$recursive_log"
 
 suid_log="$(mktemp /tmp/test_list_files_suid.XXXXXX)"
-"$BIN" linux list-files "$TMP_DIR" --suid-only >"$suid_log" 2>&1
+run_with_output_override "$BIN" linux list-files "$TMP_DIR" --suid-only >"$suid_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_SUID_FILE" "$suid_log" && ! file_has_exact_line "$TMP_SUID_FILE" "$suid_log" && ! file_has_exact_line "$TMP_FILE" "$suid_log"; then
     echo "[PASS] linux list-files --suid-only filters non-SUID files"
@@ -168,7 +168,7 @@ fi
 rm -f "$suid_log"
 
 recursive_suid_log="$(mktemp /tmp/test_list_files_recursive_suid.XXXXXX)"
-"$BIN" linux list-files "$TMP_DIR" --recursive --suid-only >"$recursive_suid_log" 2>&1
+run_with_output_override "$BIN" linux list-files "$TMP_DIR" --recursive --suid-only >"$recursive_suid_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_SUID_FILE" "$recursive_suid_log" && file_has_exact_line "$TMP_SUID_FILE" "$recursive_suid_log" && ! file_has_exact_line "$TMP_FILE" "$recursive_suid_log"; then
     echo "[PASS] linux list-files --recursive --suid-only includes nested SUID files only"
@@ -181,7 +181,7 @@ fi
 rm -f "$recursive_suid_log"
 
 perm_octal_log="$(mktemp /tmp/test_list_files_perm_octal.XXXXXX)"
-"$BIN" linux list-files "$TMP_DIR" --permissions 0600 >"$perm_octal_log" 2>&1
+run_with_output_override "$BIN" linux list-files "$TMP_DIR" --permissions 0600 >"$perm_octal_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_600_FILE" "$perm_octal_log" && ! file_has_exact_line "$TMP_TOP_FILE" "$perm_octal_log" && ! file_has_exact_line "$TMP_TOP_SUID_FILE" "$perm_octal_log"; then
     echo "[PASS] linux list-files --permissions octal filters exact mode"
@@ -194,7 +194,7 @@ fi
 rm -f "$perm_octal_log"
 
 perm_symbolic_log="$(mktemp /tmp/test_list_files_perm_symbolic.XXXXXX)"
-"$BIN" linux list-files "$TMP_DIR" --permissions u+rw,go-rwx >"$perm_symbolic_log" 2>&1
+run_with_output_override "$BIN" linux list-files "$TMP_DIR" --permissions u+rw,go-rwx >"$perm_symbolic_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_600_FILE" "$perm_symbolic_log" && ! file_has_exact_line "$TMP_TOP_FILE" "$perm_symbolic_log" && ! file_has_exact_line "$TMP_TOP_SUID_FILE" "$perm_symbolic_log"; then
     echo "[PASS] linux list-files --permissions symbolic filters matching permissions"
@@ -207,7 +207,7 @@ fi
 rm -f "$perm_symbolic_log"
 
 user_log="$(mktemp /tmp/test_list_files_user.XXXXXX)"
-"$BIN" linux list-files "$TMP_DIR" --user "$CURRENT_USER" >"$user_log" 2>&1
+run_with_output_override "$BIN" linux list-files "$TMP_DIR" --user "$CURRENT_USER" >"$user_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$user_log" && file_has_exact_line "$TMP_TOP_SUID_FILE" "$user_log" && file_has_exact_line "$TMP_TOP_600_FILE" "$user_log"; then
     echo "[PASS] linux list-files --user filters by owner"
@@ -220,7 +220,7 @@ fi
 rm -f "$user_log"
 
 group_log="$(mktemp /tmp/test_list_files_group.XXXXXX)"
-"$BIN" linux list-files "$TMP_DIR" --group "$CURRENT_GROUP" >"$group_log" 2>&1
+run_with_output_override "$BIN" linux list-files "$TMP_DIR" --group "$CURRENT_GROUP" >"$group_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_TOP_FILE" "$group_log" && file_has_exact_line "$TMP_TOP_SUID_FILE" "$group_log" && file_has_exact_line "$TMP_TOP_600_FILE" "$group_log"; then
     echo "[PASS] linux list-files --group filters by group"
@@ -233,7 +233,7 @@ fi
 rm -f "$group_log"
 
 warn_log="$(mktemp /tmp/test_list_files_warn.XXXXXX)"
-"$BIN" --output-format json linux list-files --help >"$warn_log" 2>&1
+run_with_output_override "$BIN" --output-format json linux list-files --help >"$warn_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && grep -q "Warning: --output-format has no effect for list-files" "$warn_log"; then
     echo "[PASS] linux list-files warns when --output-format is set"

@@ -81,6 +81,108 @@ run_exact_case "linux list-symlinks default directory" 0 "$BIN" linux list-symli
 run_exact_case "linux list-symlinks --recursive" 0 "$BIN" linux list-symlinks "$TMP_DIR" --recursive
 run_accept_case "linux list-symlinks global --output-http" "$BIN" --output-http http://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
 run_accept_case "linux list-symlinks global --output-https" "$BIN" --output-https https://127.0.0.1:1/symlink-list linux list-symlinks "$TMP_DIR"
+
+python_bin=""
+if command_exists python3; then
+    python_bin="python3"
+elif command_exists python; then
+    python_bin="python"
+fi
+
+if [ -n "$python_bin" ]; then
+    http_req_path="$(mktemp /tmp/test_list_symlinks_http_path.XXXXXX)"
+    http_req_type="$(mktemp /tmp/test_list_symlinks_http_type.XXXXXX)"
+    http_req_body="$(mktemp /tmp/test_list_symlinks_http_body.XXXXXX)"
+    http_server_log="$(mktemp /tmp/test_list_symlinks_http_server.XXXXXX)"
+
+    REQUEST_PATH_FILE="$http_req_path" REQUEST_TYPE_FILE="$http_req_type" REQUEST_BODY_FILE="$http_req_body" \
+        "$python_bin" - <<'PY' >"$http_server_log" 2>&1 &
+import http.server
+import os
+import socketserver
+import threading
+
+path_file = os.environ['REQUEST_PATH_FILE']
+type_file = os.environ['REQUEST_TYPE_FILE']
+body_file = os.environ['REQUEST_BODY_FILE']
+
+class OneShotTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get('Content-Length', '0'))
+        body = self.rfile.read(length)
+        with open(path_file, 'w', encoding='utf-8') as fh:
+            fh.write(self.path)
+        with open(type_file, 'w', encoding='utf-8') as fh:
+            fh.write(self.headers.get('Content-Type', ''))
+        with open(body_file, 'wb') as fh:
+            fh.write(body)
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'ok\n')
+        threading.Thread(target=self.server.shutdown, daemon=True).start()
+
+    def log_message(self, format, *args):
+        pass
+
+with OneShotTCPServer(('127.0.0.1', 0), Handler) as httpd:
+    print(f'ready:{httpd.server_address[1]}', flush=True)
+    httpd.serve_forever()
+PY
+    http_server_pid=$!
+
+    ready=0
+    http_port=""
+    i=0
+    while [ "$i" -lt 50 ]; do
+        http_port="$(sed -n 's/^ready://p' "$http_server_log" 2>/dev/null | head -n 1)"
+        if [ -n "$http_port" ]; then
+            ready=1
+            break
+        fi
+        if ! kill -0 "$http_server_pid" 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+        i="$(expr "$i" + 1)"
+    done
+
+    http_post_log="$(mktemp /tmp/test_list_symlinks_http_post.XXXXXX)"
+    if [ "$ready" -eq 1 ]; then
+        "$BIN" --output-http "http://127.0.0.1:$http_port" linux list-symlinks "$TMP_DIR" >"$http_post_log" 2>&1
+        rc=$?
+        wait "$http_server_pid" 2>/dev/null || true
+
+        if [ "$rc" -eq 0 ] && \
+           grep -F "/upload/symlink-list?filePath=%2F" "$http_req_path" >/dev/null 2>&1 && \
+           grep -F "text/plain; charset=utf-8" "$http_req_type" >/dev/null 2>&1 && \
+           file_has_exact_line "$TMP_LINK_TOP -> /tmp/target-top" "$http_req_body"; then
+            echo "[PASS] linux list-symlinks global --output-http performs HTTP POST upload"
+            PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+        else
+            echo "[FAIL] linux list-symlinks global --output-http performs HTTP POST upload (rc=$rc)"
+            sed -n '1,80p' "$http_post_log"
+            echo "--- request path ---"
+            sed -n '1,20p' "$http_req_path" 2>/dev/null || true
+            echo "--- request content-type ---"
+            sed -n '1,20p' "$http_req_type" 2>/dev/null || true
+            echo "--- request body ---"
+            sed -n '1,20p' "$http_req_body" 2>/dev/null || true
+            FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+        fi
+    else
+        echo "[FAIL] linux list-symlinks global --output-http performs HTTP POST upload (server did not start)"
+        sed -n '1,80p' "$http_server_log" 2>/dev/null || true
+        FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+        kill "$http_server_pid" 2>/dev/null || true
+        wait "$http_server_pid" 2>/dev/null || true
+    fi
+
+    rm -f "$http_req_path" "$http_req_type" "$http_req_body" "$http_server_log" "$http_post_log"
+fi
+
 tcp_log="$(mktemp /tmp/test_list_symlinks_tcp.XXXXXX)"
 "$BIN" --output-tcp 127.0.0.1:9 linux list-symlinks "$TMP_DIR" >"$tcp_log" 2>&1
 rc=$?
@@ -99,7 +201,7 @@ run_exact_case "linux list-symlinks with --output-format csv" 0 "$BIN" --output-
 run_exact_case "linux list-symlinks with --output-format json" 0 "$BIN" --output-format json linux list-symlinks "$TMP_DIR"
 
 txt_log="$(mktemp /tmp/test_list_symlinks_txt.XXXXXX)"
-"$BIN" --output-format txt linux list-symlinks "$TMP_DIR" >"$txt_log" 2>&1
+run_with_output_override "$BIN" --output-format txt linux list-symlinks "$TMP_DIR" >"$txt_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_LINK_TOP -> /tmp/target-top" "$txt_log" && ! file_has_exact_line "$TMP_LINK_SUB -> ../plain.txt" "$txt_log"; then
     echo "[PASS] linux list-symlinks default listing stays non-recursive"
@@ -112,7 +214,7 @@ fi
 rm -f "$txt_log"
 
 recursive_log="$(mktemp /tmp/test_list_symlinks_recursive.XXXXXX)"
-"$BIN" --output-format txt linux list-symlinks "$TMP_DIR" --recursive >"$recursive_log" 2>&1
+run_with_output_override "$BIN" --output-format txt linux list-symlinks "$TMP_DIR" --recursive >"$recursive_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "$TMP_LINK_TOP -> /tmp/target-top" "$recursive_log" && file_has_exact_line "$TMP_LINK_SUB -> ../plain.txt" "$recursive_log"; then
     echo "[PASS] linux list-symlinks --recursive includes nested symlinks"
@@ -125,7 +227,7 @@ fi
 rm -f "$recursive_log"
 
 csv_log="$(mktemp /tmp/test_list_symlinks_csv.XXXXXX)"
-"$BIN" --output-format csv linux list-symlinks "$TMP_DIR" >"$csv_log" 2>&1
+run_with_output_override "$BIN" --output-format csv linux list-symlinks "$TMP_DIR" >"$csv_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "\"$TMP_LINK_TOP\",\"/tmp/target-top\"" "$csv_log"; then
     echo "[PASS] linux list-symlinks csv output matches expected format"
@@ -138,7 +240,7 @@ fi
 rm -f "$csv_log"
 
 json_log="$(mktemp /tmp/test_list_symlinks_json.XXXXXX)"
-"$BIN" --output-format json linux list-symlinks "$TMP_DIR" >"$json_log" 2>&1
+run_with_output_override "$BIN" --output-format json linux list-symlinks "$TMP_DIR" >"$json_log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && file_has_exact_line "{\"link_path\":\"$TMP_LINK_TOP\",\"location_path\":\"/tmp/target-top\"}" "$json_log"; then
     echo "[PASS] linux list-symlinks json output matches expected format"
