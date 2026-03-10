@@ -309,8 +309,9 @@ function parseArgs(argv) {
     host: '0.0.0.0',
     port: 5000,
     logPrefix: 'post_requests',
+    dataDir: 'api/data',
     repo: 'nstarke/embedded_linux_audit',
-    assetsDir: 'data/release_binaries',
+    assetsDir: null,
     testsDir: 'tests',
     githubToken: process.env.GITHUB_TOKEN || '',
     forceDownload: false,
@@ -328,6 +329,7 @@ function parseArgs(argv) {
       case '--host': args.host = argv[++i]; break;
       case '--port': args.port = Number(argv[++i]); break;
       case '--log-prefix': args.logPrefix = argv[++i]; break;
+      case '--data-dir': args.dataDir = argv[++i]; break;
       case '--repo': args.repo = argv[++i]; break;
       case '--assets-dir': args.assetsDir = argv[++i]; break;
       case '--tests-dir': args.testsDir = argv[++i]; break;
@@ -355,7 +357,7 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: node server.js [options]\n\nOptions:\n  --host HOST\n  --port PORT\n  --log-prefix PREFIX\n  --repo OWNER/NAME\n  --assets-dir DIR\n  --tests-dir DIR\n  --github-token TOKEN\n  --force-download\n  --clean\n  --https\n  --verbose\n  --cert PATH\n  --key PATH\n  --help`);
+  console.log(`Usage: node server.js [options]\n\nOptions:\n  --host HOST\n  --port PORT\n  --log-prefix PREFIX\n  --data-dir DIR\n  --repo OWNER/NAME\n  --assets-dir DIR\n  --tests-dir DIR\n  --github-token TOKEN\n  --force-download\n  --clean\n  --https\n  --verbose\n  --cert PATH\n  --key PATH\n  --help`);
 }
   
 function resolveProjectPath(targetPath) {
@@ -474,23 +476,23 @@ async function main() {
 
   const logPrefix = resolveProjectPath(args.logPrefix);
   const startupTimestamp = `${Date.now()}`;
-  const defaultDataDir = path.join(WEB_ROOT, 'data', startupTimestamp);
-  const defaultAssetsDir = path.join(WEB_ROOT, 'data', 'release_binaries');
-  const assetsDir = path.isAbsolute(args.assetsDir)
-    ? args.assetsDir
-    : (args.assetsDir === 'data/release_binaries' || args.assetsDir === 'release_binaries'
-      ? defaultAssetsDir
-      : path.resolve(defaultDataDir, args.assetsDir));
+  const dataRootDir = resolveProjectPath(args.dataDir);
+  const dataDir = path.join(dataRootDir, startupTimestamp);
+  const defaultAssetsDir = path.join(dataRootDir, 'release_binaries');
+  const assetsDir = args.assetsDir
+    ? (path.isAbsolute(args.assetsDir)
+      ? args.assetsDir
+      : path.resolve(dataDir, args.assetsDir))
+    : defaultAssetsDir;
   const testsDir = resolveProjectPath(args.testsDir);
   const token = args.githubToken || null;
-  const dataDir = defaultDataDir;
 
   if (args.clean) {
-    await removeDirectoryContents(path.join(WEB_ROOT, 'data'), new Set(['release_binaries']));
+    await removeDirectoryContents(dataRootDir, new Set(['release_binaries']));
   }
 
   await Promise.all([
-    fsp.mkdir(path.join(WEB_ROOT, 'data'), { recursive: true }),
+    fsp.mkdir(dataRootDir, { recursive: true }),
     fsp.mkdir(dataDir, { recursive: true }),
     fsp.mkdir(defaultAssetsDir, { recursive: true })
   ]);
