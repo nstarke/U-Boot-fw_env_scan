@@ -19,8 +19,8 @@ for stale_dir in /tmp/download_tests_output.*; do
 done
 
 usage() {
-    echo "usage: $0 --webserver <url> --isa <arch> [--output-directory <path>] [--auto-start]"
-    echo "   or: $0 --webserver=<url> --isa=<arch> [--output-directory=<path>] [--auto-start]"
+    echo "usage: $0 --webserver <url> [--isa <arch>] [--output-directory <path>] [--auto-start]"
+    echo "   or: $0 --webserver=<url> [--isa=<arch>] [--output-directory=<path>] [--auto-start]"
     echo "   or: $0 --webserver <url> --list-isa"
 }
 
@@ -180,11 +180,31 @@ fetch_to_file() {
     fi
 }
 
+can_run_binary() {
+    binary_path="$1"
+
+    "$binary_path" --help >/dev/null 2>&1
+    status=$?
+
+    case "$status" in
+        126|127)
+            return 1
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+}
+
 INDEX_FILE="$(mktemp /tmp/download_tests_index.XXXXXX)"
 SCRIPT_LIST_FILE="$(mktemp /tmp/download_tests_list.XXXXXX)"
+TEMP_BINARY_DIRECTORY=""
 
 cleanup() {
     rm -f "$INDEX_FILE" "$SCRIPT_LIST_FILE"
+    if [ -n "$TEMP_BINARY_DIRECTORY" ] && [ -d "$TEMP_BINARY_DIRECTORY" ]; then
+        rm -rf -- "$TEMP_BINARY_DIRECTORY"
+    fi
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -205,27 +225,23 @@ if [ "$LIST_ISA" -eq 1 ]; then
     exit 0
 fi
 
-if [ -z "$ISA" ]; then
-    echo "error: --isa is required"
-    usage
-    exit 2
-fi
+if [ -n "$ISA" ]; then
+    ISA="$(normalize_isa_value "$ISA")"
 
-ISA="$(normalize_isa_value "$ISA")"
+    isa_valid=1
+    for valid_isa in $(list_valid_isas | tr -d '\r' | sed 's/[[:space:]]*$//' | sed '/^$/d'); do
+        if [ "$valid_isa" = "$ISA" ]; then
+            isa_valid=0
+            break
+        fi
+    done
 
-isa_valid=1
-for valid_isa in $(list_valid_isas | tr -d '\r' | sed 's/[[:space:]]*$//' | sed '/^$/d'); do
-    if [ "$valid_isa" = "$ISA" ]; then
-        isa_valid=0
-        break
+    if [ "$isa_valid" -ne 0 ]; then
+        echo "error: invalid --isa '$ISA'"
+        echo "valid values:"
+        print_valid_isas
+        exit 2
     fi
-done
-
-if [ "$isa_valid" -ne 0 ]; then
-    echo "error: invalid --isa '$ISA'"
-    echo "valid values:"
-    print_valid_isas
-    exit 2
 fi
 
 if [ -n "$OUTPUT_DIRECTORY" ]; then
@@ -262,20 +278,62 @@ while IFS= read -r rel_path; do
     chmod +x "$dest"
 done <"$SCRIPT_LIST_FILE"
 
-AUDIT_BINARY_PATH="$(find_release_binary_url_for_isa "$INDEX_FILE" "$ISA")"
-if [ -z "$AUDIT_BINARY_PATH" ]; then
-    echo "error: could not find a release binary URL for ISA '$ISA' in index at $BASE_URL/"
-    exit 1
-fi
-
-AUDIT_BINARY_URL="$(resolve_url "$BASE_URL" "$AUDIT_BINARY_PATH")"
-AUDIT_BINARY_TMP="$(mktemp /tmp/embedded_linux_audit.XXXXXX)"
 AUDIT_BINARY_DEST="/tmp/embedded_linux_audit"
 
-echo "downloading $AUDIT_BINARY_URL -> $AUDIT_BINARY_DEST"
-fetch_to_file "$AUDIT_BINARY_URL" "$AUDIT_BINARY_TMP"
-chmod +x "$AUDIT_BINARY_TMP"
-mv -f "$AUDIT_BINARY_TMP" "$AUDIT_BINARY_DEST"
+if [ -n "$ISA" ]; then
+    AUDIT_BINARY_PATH="$(find_release_binary_url_for_isa "$INDEX_FILE" "$ISA")"
+    if [ -z "$AUDIT_BINARY_PATH" ]; then
+        echo "error: could not find a release binary URL for ISA '$ISA' in index at $BASE_URL/"
+        exit 1
+    fi
+
+    AUDIT_BINARY_URL="$(resolve_url "$BASE_URL" "$AUDIT_BINARY_PATH")"
+    AUDIT_BINARY_TMP="$(mktemp /tmp/embedded_linux_audit.XXXXXX)"
+
+    echo "downloading $AUDIT_BINARY_URL -> $AUDIT_BINARY_DEST"
+    fetch_to_file "$AUDIT_BINARY_URL" "$AUDIT_BINARY_TMP"
+    chmod +x "$AUDIT_BINARY_TMP"
+    mv -f "$AUDIT_BINARY_TMP" "$AUDIT_BINARY_DEST"
+else
+    TEMP_BINARY_DIRECTORY="$(mktemp -d /tmp/download_tests_binaries.XXXXXX)"
+    echo "ISA not specified; downloading release binaries for auto-discovery to: $TEMP_BINARY_DIRECTORY"
+
+    DISCOVERED_ISA=""
+    DISCOVERED_BINARY=""
+
+    for candidate_isa in $(list_valid_isas | tr -d '\r' | sed 's/[[:space:]]*$//' | sed '/^$/d'); do
+        candidate_path_rel="$(find_release_binary_url_for_isa "$INDEX_FILE" "$candidate_isa")"
+        [ -n "$candidate_path_rel" ] || continue
+
+        candidate_url="$(resolve_url "$BASE_URL" "$candidate_path_rel")"
+        candidate_file="$TEMP_BINARY_DIRECTORY/embedded_linux_audit-$candidate_isa"
+
+        echo "downloading $candidate_url -> $candidate_file"
+        fetch_to_file "$candidate_url" "$candidate_file"
+        chmod +x "$candidate_file"
+    done
+
+    for candidate_isa in $(list_valid_isas | tr -d '\r' | sed 's/[[:space:]]*$//' | sed '/^$/d'); do
+        candidate_file="$TEMP_BINARY_DIRECTORY/embedded_linux_audit-$candidate_isa"
+        [ -f "$candidate_file" ] || continue
+
+        echo "probing ISA candidate: $candidate_isa"
+        if can_run_binary "$candidate_file"; then
+            DISCOVERED_ISA="$candidate_isa"
+            DISCOVERED_BINARY="$candidate_file"
+            break
+        fi
+    done
+
+    if [ -z "$DISCOVERED_ISA" ] || [ -z "$DISCOVERED_BINARY" ]; then
+        echo "error: could not discover a working ISA from release binaries at $BASE_URL/"
+        exit 1
+    fi
+
+    mv -f "$DISCOVERED_BINARY" "$AUDIT_BINARY_DEST"
+    ISA="$DISCOVERED_ISA"
+    echo "detected proper ISA for this system: $ISA"
+fi
 
 echo "done"
 if [ -n "$TEMP_OUTPUT_DIRECTORY" ]; then
