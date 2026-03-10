@@ -11,19 +11,19 @@ COMPAT_CFLAGS +=
 else ifeq ($(COMPAT_CPU),x86)
 COMPAT_CFLAGS += -march=i686
 else ifeq ($(COMPAT_CPU),x86_64)
-COMPAT_CFLAGS += -march=x86-64
+COMPAT_CFLAGS += -mcpu=x86_64
 else ifeq ($(COMPAT_CPU),arm32)
-COMPAT_CFLAGS += -march=armv5te -marm
+COMPAT_CFLAGS += -mcpu=arm10tdmi -marm
 else ifeq ($(COMPAT_CPU),arm32hf)
 COMPAT_CFLAGS += -march=armv6 -marm -mfloat-abi=hard
 else ifeq ($(COMPAT_CPU),armeb)
-COMPAT_CFLAGS += -march=armv5te -marm
+COMPAT_CFLAGS += -mcpu=arm10tdmi -marm
 else ifeq ($(COMPAT_CPU),armebhf)
 COMPAT_CFLAGS += -march=armv6 -marm -mfloat-abi=hard
 else ifeq ($(COMPAT_CPU),aarch64)
-COMPAT_CFLAGS += -march=armv8-a
+COMPAT_CFLAGS += -mcpu=baseline
 else ifeq ($(COMPAT_CPU),aarch64_be)
-COMPAT_CFLAGS += -march=armv8-a
+COMPAT_CFLAGS += -mcpu=baseline
 else ifeq ($(COMPAT_CPU),mips)
 COMPAT_CFLAGS += -march=mips32 -msoft-float
 else ifeq ($(COMPAT_CPU),mipshf)
@@ -45,13 +45,13 @@ COMPAT_CFLAGS += -mcpu=powerpc -mno-altivec
 else ifeq ($(COMPAT_CPU),powerpchf)
 COMPAT_CFLAGS += -mcpu=powerpc -mhard-float -mno-altivec
 else ifeq ($(COMPAT_CPU),powerpc64)
-COMPAT_CFLAGS += -mcpu=powerpc64 -mno-altivec
+COMPAT_CFLAGS += -mcpu=ppc64 -mno-altivec
 else ifeq ($(COMPAT_CPU),powerpc64le)
-COMPAT_CFLAGS += -mcpu=powerpc64 -mno-altivec
+COMPAT_CFLAGS += -mcpu=ppc64 -mno-altivec
 else ifeq ($(COMPAT_CPU),riscv32)
-COMPAT_CFLAGS += -march=rv32imac -mabi=ilp32
+COMPAT_CFLAGS += -mcpu=baseline_rv32 -mabi=ilp32
 else ifeq ($(COMPAT_CPU),riscv64)
-COMPAT_CFLAGS += -march=rv64gc -mabi=lp64d
+COMPAT_CFLAGS += -mcpu=baseline_rv64 -mabi=lp64d
 else ifeq ($(COMPAT_CPU),s390x)
 COMPAT_CFLAGS += -march=z10
 else ifeq ($(COMPAT_CPU),sparc64)
