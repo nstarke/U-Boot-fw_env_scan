@@ -347,6 +347,19 @@ if [ "$AUTO_START" -eq 1 ]; then
         exit 1
     fi
 
-    echo "auto-start: running $TEST_ALL_SCRIPT --output-http $WEB_SERVER"
-    /bin/sh "$TEST_ALL_SCRIPT" --output-http "$WEB_SERVER"
+    case "$WEB_SERVER" in
+        https://*)
+            AUTO_OUTPUT_FLAG="--output-https"
+            ;;
+        http://*)
+            AUTO_OUTPUT_FLAG="--output-http"
+            ;;
+        *)
+            echo "error: unsupported webserver URL scheme for --auto-start: $WEB_SERVER"
+            exit 1
+            ;;
+    esac
+
+    echo "auto-start: running $TEST_ALL_SCRIPT $AUTO_OUTPUT_FLAG $WEB_SERVER"
+    /bin/sh "$TEST_ALL_SCRIPT" "$AUTO_OUTPUT_FLAG" "$WEB_SERVER"
 fi
