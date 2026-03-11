@@ -1,33 +1,50 @@
-MIT License
+Project Licensing
+=================
 
-Copyright (c) 2026 Nicholas Starke
+This repository contains multiple components with different licenses.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. embedded_linux_audit agent
+-----------------------------
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The `embedded_linux_audit` agent program is licensed under the
+GNU General Public License, version 3 or (at your option) any later
+version.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+This applies to the agent and its associated source/build material,
+including files under:
 
-Additional Notices
-------------------
+- `agent/`
+- `compat/` (except where a file states otherwise)
+- `tests/agent/`
+- `Makefile`
+- `.github/workflows/release-cross-static.yml`
+- `tools/compile_release_binaries_locally.sh`
+- documentation describing the agent CLI under `docs/`
 
-The file `compat/sys/queue.h` is provided under the BSD 2-Clause license
-(SPDX-License-Identifier: BSD-2-Clause), as noted in that file header.
+See `COPYING` for the full GPL-3.0-or-later license text.
 
-This repository also includes git submodules under `third_party/` with their
-own licenses:
+2. API helper and repository glue
+---------------------------------
+
+The Node.js helper API and other repository files not covered above are
+licensed under the MIT License.
+
+This includes, for example:
+
+- `api/agent/`
+- top-level repository metadata unless otherwise noted
+
+See `LICENSE.api` for the full MIT license text.
+
+3. File-level exceptions and bundled third-party components
+-----------------------------------------------------------
+
+- The file `compat/sys/queue.h` is provided under the BSD 2-Clause license
+  (SPDX-License-Identifier: BSD-2-Clause), as noted in that file header.
+- Git submodules and bundled third-party code under `third_party/` remain
+  under their own respective licenses.
+
+Notable third-party license notices include:
 
 - `third_party/libcsv` — GNU Lesser General Public License v2.1
   (`third_party/libcsv/COPYING`)
@@ -38,14 +55,17 @@ own licenses:
   (`third_party/openssl/LICENSE.txt`)
 - `third_party/u-boot` — GNU General Public License v2
   (`third_party/u-boot/COPYING`)
-- `third_party/libubootenv` — LGPL-2.1-or-later (project/library code), with
-  additional REUSE-declared licenses in `third_party/libubootenv/LICENSES/`
-  including MIT and CC0-1.0
+- `third_party/libubootenv` — LGPL-2.1-or-later, with additional notices in
+  `third_party/libubootenv/LICENSES/`
 - `third_party/ncurses` — ncurses license / MIT-like permissive license
   (`third_party/ncurses/COPYING`)
 - `third_party/readline` — GNU General Public License v3 or later
   (`third_party/readline/COPYING`)
 - `third_party/zlib` — zlib License (`third_party/zlib/LICENSE`)
+- `third_party/libefivar` — GNU Lesser General Public License
+  (`third_party/libefivar/COPYING`)
+- `third_party/wolfssl` — GNU General Public License v3
+  (`third_party/wolfssl/COPYING`), unless you have separate commercial terms
 
 Please consult the referenced files within each submodule for complete and
 authoritative license terms.

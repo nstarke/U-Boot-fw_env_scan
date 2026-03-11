@@ -85,3 +85,15 @@ Common options include:
 - `--verbose` to enable per-request console logging
 
 For more detail, see [docs/api-helper-server.md](docs/api-helper-server.md).
+
+## Licensing
+
+This repository is split-license:
+
+- The `embedded_linux_audit` agent and its associated build/test material are
+  licensed under **GPL-3.0-or-later**. See [COPYING](COPYING).
+- The helper API under `api/agent/` and other non-agent repository files are
+  licensed under **MIT** unless noted otherwise. See [LICENSE.api](LICENSE.api).
+- Third-party code under `third_party/` remains under its own licenses.
+
+See [LICENSE](LICENSE) for the repository licensing breakdown.
