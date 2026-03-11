@@ -16,6 +16,7 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <unistd.h>
 #include <curl/curl.h>
 
@@ -66,6 +67,70 @@ static int append_text(char **buf, size_t *len, size_t *cap, const char *text)
 	*len += text_len;
 	(*buf)[*len] = '\0';
 	return 0;
+}
+
+static const char *normalize_isa_name(const char *isa)
+{
+	if (!isa || !*isa)
+		return NULL;
+
+	if (!strcmp(isa, "x86") || !strcmp(isa, "i386") || !strcmp(isa, "i486") ||
+	    !strcmp(isa, "i586") || !strcmp(isa, "i686"))
+		return FW_AUDIT_ISA_X86;
+
+	if (!strcmp(isa, "x86_64") || !strcmp(isa, "amd64"))
+		return FW_AUDIT_ISA_X86_64;
+
+	if (!strcmp(isa, "aarch64") || !strcmp(isa, "arm64") || !strcmp(isa, "aarch64le") ||
+	    !strcmp(isa, "aarch64-le"))
+		return FW_AUDIT_ISA_AARCH64_LE;
+
+	if (!strcmp(isa, "aarch64_be") || !strcmp(isa, "aarch64be") || !strcmp(isa, "aarch64-be"))
+		return FW_AUDIT_ISA_AARCH64_BE;
+
+	return isa;
+}
+
+const char *fw_audit_detect_isa(void)
+{
+	static char detected_isa[32];
+	static bool initialized;
+	const char *override_isa;
+	struct utsname uts;
+	const char *normalized;
+
+	if (initialized)
+		return detected_isa[0] ? detected_isa : NULL;
+
+	override_isa = getenv("FW_AUDIT_TEST_ISA");
+	if (override_isa && *override_isa) {
+		normalized = normalize_isa_name(override_isa);
+		snprintf(detected_isa, sizeof(detected_isa), "%s", normalized ? normalized : override_isa);
+		initialized = true;
+		return detected_isa;
+	}
+
+	if (uname(&uts) == 0) {
+		normalized = normalize_isa_name(uts.machine);
+		if (normalized && *normalized)
+			snprintf(detected_isa, sizeof(detected_isa), "%s", normalized);
+	}
+
+	initialized = true;
+	return detected_isa[0] ? detected_isa : NULL;
+}
+
+bool fw_audit_isa_supported_for_efi_bios(const char *isa)
+{
+	const char *normalized = normalize_isa_name(isa);
+
+	if (!normalized)
+		return false;
+
+	return !strcmp(normalized, FW_AUDIT_ISA_X86) ||
+	       !strcmp(normalized, FW_AUDIT_ISA_X86_64) ||
+	       !strcmp(normalized, FW_AUDIT_ISA_AARCH64_BE) ||
+	       !strcmp(normalized, FW_AUDIT_ISA_AARCH64_LE);
 }
 
 static int append_json_escaped(char **buf, size_t *len, size_t *cap, const char *text)

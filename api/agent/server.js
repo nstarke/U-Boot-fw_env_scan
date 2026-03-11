@@ -47,7 +47,7 @@ function findProjectRoot(startDir) {
 
 const PROJECT_ROOT = findProjectRoot(__dirname);
 const WEB_ROOT = __dirname;
-const VALID_UPLOAD_TYPES = new Set(['cmd', 'dmesg', 'file', 'file-list', 'log', 'logs', 'orom', 'symlink-list', 'uboot-image', 'uboot-environment']);
+const VALID_UPLOAD_TYPES = new Set(['cmd', 'dmesg', 'efi-vars', 'file', 'file-list', 'log', 'logs', 'orom', 'symlink-list', 'uboot-image', 'uboot-environment']);
 const VALID_CONTENT_TYPES = {
   'text/plain': 'text_plain',
   'text/csv': 'text_csv',

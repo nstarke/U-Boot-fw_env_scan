@@ -4,7 +4,7 @@
 
 #include <errno.h>
 #include <getopt.h>
-#include <json-c/json.h>
+#include <json.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>

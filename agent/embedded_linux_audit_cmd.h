@@ -16,6 +16,11 @@
 #define FW_SCAN_GLOB_MMCBLK    (1U << 4)
 #define FW_SCAN_GLOB_SDBLK     (1U << 5)
 
+#define FW_AUDIT_ISA_X86          "x86"
+#define FW_AUDIT_ISA_X86_64       "x86_64"
+#define FW_AUDIT_ISA_AARCH64_BE   "aarch64-be"
+#define FW_AUDIT_ISA_AARCH64_LE   "aarch64-le"
+
 int uboot_get_mtd_index(const char *dev, char *idx, size_t idx_sz);
 
 uint64_t uboot_guess_size_from_sysfs(const char *dev);
@@ -41,6 +46,8 @@ void uboot_ensure_block_nodes(bool verbose, bool include_sd, bool include_emmc);
 
 int uboot_parse_u64(const char *s, uint64_t *out);
 uint32_t uboot_read_be32(const uint8_t *p);
+const char *fw_audit_detect_isa(void);
+bool fw_audit_isa_supported_for_efi_bios(const char *isa);
 int uboot_connect_tcp_ipv4(const char *spec);
 int uboot_send_all(int sock, const uint8_t *buf, size_t len);
 char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_port);

@@ -26,6 +26,8 @@ module.exports = function registerUploadRoute(app, deps) {
         return path.join(baseDir, 'dmesg');
       case 'cmd':
         return path.join(baseDir, 'cmd');
+      case 'efi-vars':
+        return path.join(baseDir, 'efi-vars');
       case 'file-list':
         return path.join(baseDir, 'file-list');
       case 'symlink-list':
@@ -51,6 +53,8 @@ module.exports = function registerUploadRoute(app, deps) {
         return path.join(targetDir, `dmesg.${timestamp}`);
       case 'cmd':
         return path.join(targetDir, `cmd.${timestamp}`);
+      case 'efi-vars':
+        return path.join(targetDir, `efi-vars.${timestamp}`);
       default:
         return path.join(targetDir, uploadType);
     }

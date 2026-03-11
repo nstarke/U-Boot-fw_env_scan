@@ -1094,6 +1094,7 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 	int cmd_idx = 1;
 	int ret;
 	char *command_summary;
+	const char *isa;
 
 	if (getenv("FW_AUDIT_OUTPUT_FORMAT") && *getenv("FW_AUDIT_OUTPUT_FORMAT"))
 		output_format = getenv("FW_AUDIT_OUTPUT_FORMAT");
@@ -1403,6 +1404,15 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 	if (!strcmp(argv[cmd_idx], "efi")) {
 		int sub_idx = cmd_idx + 1;
 
+		isa = fw_audit_detect_isa();
+		if (!fw_audit_isa_supported_for_efi_bios(isa)) {
+			fprintf(stderr,
+				"Unsupported ISA for efi group: %s (supported: x86, x86_64, aarch64-be, aarch64-le)\n",
+				isa ? isa : "unknown");
+			ret = 1;
+			goto done;
+		}
+
 		if (sub_idx >= argc || !strcmp(argv[sub_idx], "-h") ||
 		    !strcmp(argv[sub_idx], "--help") || !strcmp(argv[sub_idx], "help")) {
 			usage(argv[0]);
@@ -1425,6 +1435,15 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 
 	if (!strcmp(argv[cmd_idx], "bios")) {
 		int sub_idx = cmd_idx + 1;
+
+		isa = fw_audit_detect_isa();
+		if (!fw_audit_isa_supported_for_efi_bios(isa)) {
+			fprintf(stderr,
+				"Unsupported ISA for bios group: %s (supported: x86, x86_64, aarch64-be, aarch64-le)\n",
+				isa ? isa : "unknown");
+			ret = 1;
+			goto done;
+		}
 
 		if (sub_idx >= argc || !strcmp(argv[sub_idx], "-h") ||
 		    !strcmp(argv[sub_idx], "--help") || !strcmp(argv[sub_idx], "help")) {

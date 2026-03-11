@@ -131,10 +131,15 @@ ifneq ($(filter $(COMPAT_CPU),arm32 armeb),)
 # Older 32-bit ARM compatibility targets do not reliably report these sizes via
 # curl's CMake probes when cross-compiling with zig cc. Seed the known values.
 CURL_CMAKE_ARGS += -DSIZEOF_SIZE_T=4 -DSIZEOF_SSIZE_T=4 -DSIZEOF_LONG=4 -DSIZEOF_INT=4 -DSIZEOF_TIME_T=4 -DSIZEOF_SUSECONDS_T=4 -DSIZEOF_SA_FAMILY_T=2 -DSIZEOF_OFF_T=8 -DSIZEOF_CURL_OFF_T=8 -DSIZEOF_CURL_SOCKET_T=4
-# Zig's older 32-bit ARM compatibility targets do not provide the legacy
-# __sync atomics that curl's lock-free init path expects. Disable that probe
-# so curl falls back to the non-atomic path for these cross builds.
+endif
+
+ifneq ($(filter $(COMPAT_CPU),arm32 armeb powerpc powerpchf),)
+# Older 32-bit ARM and PowerPC compatibility targets built through zig cc can
+# mis-detect working atomics in curl/zlib during cross-compile feature probes.
+# That can produce binaries that only fault once libcurl first initializes on
+# the target. Force the non-atomic fallback paths for these compat builds.
 CURL_CMAKE_ARGS += -DHAVE_ATOMIC=0 -DHAVE_STDATOMIC_H=0
+ZLIB_EXTRA_CFLAGS += -D__STDC_NO_ATOMICS__=1
 endif
 
 LIBCSV_DIR    := third_party/libcsv
@@ -177,17 +182,14 @@ READLINE_BUILD_STAMP := $(READLINE_DIR)/.ela-build-$(CC_TAG)
 READLINE_LIB  := $(READLINE_DIR)/libreadline.a
 READLINE_HISTORY_LIB := $(READLINE_DIR)/libhistory.a
 READLINE_BUILD_CFLAGS ?= -O2 -Wno-incompatible-pointer-types
+LIBEFIVAR_HOST_CFLAGS ?= -O2 -std=gnu11 -funsigned-char -fvisibility=hidden
+LIBEFIVAR_HOST_CPPFLAGS ?= -I$(abspath $(LIBEFIVAR_DIR))/src/include -DEFIVAR_BUILD_ENVIRONMENT
+LIBEFIVAR_HOST_LDFLAGS ?= $(LIBEFIVAR_HOST_CFLAGS)
 GENERATED_DIR := generated
 DEFAULT_CA_BUNDLE_PEM := $(GENERATED_DIR)/cacert.pem
 CA_BUNDLE_URL ?= https://curl.se/ca/cacert.pem
 CA_BUNDLE_PEM ?= $(DEFAULT_CA_BUNDLE_PEM)
 GENERATED_CA_SRC := $(GENERATED_DIR)/fw_default_ca_bundle.c
-
-ifneq ($(filter $(COMPAT_CPU),arm32 armeb),)
-# Older 32-bit ARM targets handled via Zig do not provide working lock-free
-# atomics for zlib's z_once helper. Force zlib onto its non-atomic fallback.
-ZLIB_EXTRA_CFLAGS += -D__STDC_NO_ATOMICS__=1
-endif
 
 ZLIB_CMAKE_ARGS := $(CMAKE_CC_ARGS)
 ifneq ($(strip $(ZLIB_EXTRA_CFLAGS)),)
@@ -245,7 +247,7 @@ $(LIBUBOOTENV_LIB): $(ZLIB_LIB)
 
 $(LIBEFIVAR_BUILD_STAMP):
 	-$(MAKE) -C $(LIBEFIVAR_DIR)/src TOPDIR='$(abspath $(LIBEFIVAR_DIR))' clean >/dev/null 2>&1 || true
-	$(MAKE) -C $(LIBEFIVAR_DIR)/src TOPDIR='$(abspath $(LIBEFIVAR_DIR))' libefivar.a CC='$(CC)' HOSTCC='cc' HOSTCCLD='cc' AR='ar' RANLIB='ranlib' CFLAGS='$(COMPAT_CFLAGS)' CPPFLAGS='-I$(abspath $(LIBEFIVAR_DIR))/src/include'
+	$(MAKE) -C $(LIBEFIVAR_DIR)/src TOPDIR='$(abspath $(LIBEFIVAR_DIR))' libefivar.a CC='$(CC)' HOSTCC='cc' HOSTCCLD='cc' AR='ar' RANLIB='ranlib' CFLAGS='$(COMPAT_CFLAGS)' CPPFLAGS='-I$(abspath $(LIBEFIVAR_DIR))/src/include' HOST_CFLAGS='$(LIBEFIVAR_HOST_CFLAGS)' HOST_CPPFLAGS='$(LIBEFIVAR_HOST_CPPFLAGS)' HOST_LDFLAGS='$(LIBEFIVAR_HOST_LDFLAGS)' HOST_CCLDFLAGS='$(LIBEFIVAR_HOST_LDFLAGS)'
 	test -f $(LIBEFIVAR_LIB)
 	touch $@
 

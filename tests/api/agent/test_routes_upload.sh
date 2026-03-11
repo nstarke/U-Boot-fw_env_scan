@@ -87,7 +87,7 @@ if [ -n "$dmesg_log" ]; then
 else
     fail_case "ndjson upload creates timestamped dmesg log" sh -c "find \"$MAC_DIR/dmesg\" -maxdepth 1 -type f -print 2>/dev/null || true"
 fi
-assert_file_contains "ndjson upload records timestamp" "$dmesg_log" '"timestamp"'
+assert_file_contains "ndjson upload records api timestamp" "$dmesg_log" '"api_timestamp"'
 assert_file_contains "ndjson upload records source ip" "$dmesg_log" '"src_ip"'
 
 run_curl_case "POST invalid json falls back to raw body" POST "$TEST_WEB_BASE_URL/$MAC/upload/orom" 200 "ok" -H "Content-Type: text/plain" --data-binary '{not-json}'
@@ -106,5 +106,15 @@ fi
 
 run_curl_case "POST uboot-environment stores text log" POST "$TEST_WEB_BASE_URL/$MAC/upload/uboot-environment" 200 "ok" -H "Content-Type: text/plain" --data-binary "env line"
 assert_file_contains "uboot-environment upload writes env log" "$MAC_DIR/uboot/env/uboot-environment.text_plain.log" "env line"
+
+run_curl_case "POST efi-vars stores timestamped ndjson log" POST "$TEST_WEB_BASE_URL/$MAC/upload/efi-vars" 200 "ok" -H "Content-Type: application/x-ndjson" --data-binary '{"guid":"g","name":"n"}'
+efi_vars_log="$(find "$MAC_DIR/efi-vars" -maxdepth 1 -type f -name 'efi-vars.*.application_x_ndjson.log' | head -n 1)"
+if [ -n "$efi_vars_log" ]; then
+    pass_case "efi-vars upload creates timestamped log in efi-vars directory"
+else
+    fail_case "efi-vars upload creates timestamped log in efi-vars directory" sh -c "find \"$MAC_DIR/efi-vars\" -maxdepth 2 -print 2>/dev/null || true"
+fi
+assert_file_contains "efi-vars upload stores ndjson payload" "$efi_vars_log" '"guid":"g"'
+assert_file_contains "efi-vars upload records source ip" "$efi_vars_log" '"src_ip"'
 
 finish_web_tests
