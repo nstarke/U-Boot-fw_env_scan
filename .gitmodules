@@ -28,3 +28,6 @@
 [submodule "third_party/libefivar"]
 	path = third_party/libefivar
 	url = https://github.com/rhboot/efivar.git
+[submodule "third_party/wolfssl"]
+	path = third_party/wolfssl
+	url = https://github.com/wolfSSL/wolfssl.git

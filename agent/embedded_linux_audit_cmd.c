@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -20,6 +21,20 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 #include <curl/curl.h>
+#include <wolfssl/options.h>
+#include <wolfssl/ssl.h>
+#ifdef SHA256
+#undef SHA256
+#endif
+#ifdef SHA224
+#undef SHA224
+#endif
+#ifdef SHA384
+#undef SHA384
+#endif
+#ifdef SHA512
+#undef SHA512
+#endif
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
@@ -81,6 +96,8 @@ struct parsed_http_uri {
 	uint16_t port;
 	char path[PATH_MAX];
 };
+
+static int parse_status_code_from_headers(const char *headers);
 
 static int append_bytes(char **buf, size_t *len, size_t *cap, const char *data, size_t data_len)
 {
@@ -628,6 +645,267 @@ static bool isa_is_powerpc_family(const char *isa)
 	       !strcmp(normalized, "ppc64le");
 }
 
+static const char *fw_audit_sigill_stage = "startup";
+
+#ifdef DEBUG
+static bool fw_audit_sigill_debug_enabled(void)
+{
+	const char *v = getenv("FW_AUDIT_SIGILL_DEBUG");
+	return v && !strcmp(v, "1");
+}
+#endif
+
+static void fw_audit_set_sigill_stage(const char *stage)
+{
+	if (stage && *stage)
+		fw_audit_sigill_stage = stage;
+
+#ifdef DEBUG
+	if (fw_audit_sigill_debug_enabled())
+		fprintf(stderr, "FW_AUDIT_SIGILL stage=%s\n", fw_audit_sigill_stage);
+#endif
+}
+
+#ifdef DEBUG
+static void fw_audit_sigill_handler(int signum)
+{
+	char buf[256];
+	int len;
+	(void)signum;
+	len = snprintf(buf, sizeof(buf),
+		"FW_AUDIT_SIGILL caught illegal instruction at stage=%s\n",
+		fw_audit_sigill_stage ? fw_audit_sigill_stage : "unknown");
+	if (len > 0)
+		write(STDERR_FILENO, buf, (size_t)len);
+	signal(SIGILL, SIG_DFL);
+	raise(SIGILL);
+}
+#endif
+
+static void fw_audit_install_sigill_debug_handler(void)
+{
+	#ifdef DEBUG
+	static bool installed;
+	struct sigaction sa;
+
+	if (installed || !fw_audit_sigill_debug_enabled())
+		return;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = fw_audit_sigill_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	if (sigaction(SIGILL, &sa, NULL) == 0)
+		installed = true;
+	#endif
+}
+
+static void fw_audit_force_conservative_powerpc_crypto_caps(void)
+{
+	const char *isa = fw_audit_detect_isa();
+	const char *ppccap;
+
+	if (!isa_is_powerpc_family(isa))
+		return;
+
+	/*
+	 * For PowerPC troubleshooting builds, force OpenSSL onto its most
+	 * conservative generic code paths unless the user explicitly overrides the
+	 * capability mask. This helps isolate illegal-instruction faults caused by
+	 * runtime CPU feature detection or optimized PowerPC crypto dispatch.
+	 */
+	ppccap = getenv("OPENSSL_ppccap");
+	if (!ppccap || !*ppccap)
+		setenv("OPENSSL_ppccap", "0", 0);
+}
+
+static int wolfssl_read_headers(WOLFSSL *ssl, char **headers_out)
+{
+	char *headers = NULL;
+	size_t len = 0, cap = 0;
+	char ch;
+
+	while (1) {
+		int n = wolfSSL_read(ssl, &ch, 1);
+		if (n <= 0)
+			goto fail;
+		if (append_bytes(&headers, &len, &cap, &ch, 1) != 0)
+			goto fail;
+		if (len >= 4 && !memcmp(headers + len - 4, "\r\n\r\n", 4))
+			break;
+	}
+	*headers_out = headers;
+	return 0;
+fail:
+	free(headers);
+	return -1;
+}
+
+static int wolfssl_copy_response_body_to_file(WOLFSSL *ssl, FILE *fp)
+{
+	char buf[4096];
+	for (;;) {
+		int n = wolfSSL_read(ssl, buf, sizeof(buf));
+		if (n == 0)
+			break;
+		if (n < 0)
+			return -1;
+		if (fwrite(buf, 1, (size_t)n, fp) != (size_t)n)
+			return -1;
+	}
+	return 0;
+}
+
+static int simple_wolfssl_https_get_to_file(const struct parsed_http_uri *parsed,
+					    const char *uri,
+					    const char *output_path,
+					    bool insecure,
+					    bool verbose,
+					    char *errbuf,
+					    size_t errbuf_len)
+{
+	WOLFSSL_CTX *ctx = NULL;
+	WOLFSSL *ssl = NULL;
+	int sock = -1;
+	FILE *fp = NULL;
+	char *headers = NULL, *request = NULL;
+	size_t request_len = 0, request_cap = 0;
+	int status;
+	int rc;
+
+	fw_audit_set_sigill_stage("https:wolfssl_init");
+	if (wolfSSL_Init() != WOLFSSL_SUCCESS) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "wolfSSL_Init failed");
+		goto cleanup;
+	}
+
+	fw_audit_set_sigill_stage("https:wolfssl_ctx_new");
+	ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
+	if (!ctx) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "wolfSSL_CTX_new failed");
+		goto cleanup;
+	}
+	wolfSSL_CTX_set_verify(ctx, insecure ? WOLFSSL_VERIFY_NONE : WOLFSSL_VERIFY_PEER, NULL);
+	if (!insecure) {
+		fw_audit_set_sigill_stage("https:wolfssl_load_ca");
+		if (wolfSSL_CTX_load_verify_buffer(ctx,
+				(const unsigned char *)uboot_default_ca_bundle_pem,
+				(long)uboot_default_ca_bundle_pem_len,
+				WOLFSSL_FILETYPE_PEM) != WOLFSSL_SUCCESS) {
+			if (errbuf && errbuf_len)
+				snprintf(errbuf, errbuf_len, "wolfSSL_CTX_load_verify_buffer failed");
+			goto cleanup;
+		}
+	}
+
+	fw_audit_set_sigill_stage("https:wolfssl_tcp_connect");
+	sock = connect_tcp_host_port_any(parsed->host, parsed->port);
+	if (sock < 0) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "failed to connect to %s:%u", parsed->host, (unsigned int)parsed->port);
+		goto cleanup;
+	}
+
+	fw_audit_set_sigill_stage("https:wolfssl_new");
+	ssl = wolfSSL_new(ctx);
+	if (!ssl) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "wolfSSL_new failed");
+		goto cleanup;
+	}
+	if (wolfSSL_set_fd(ssl, sock) != WOLFSSL_SUCCESS) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "wolfSSL_set_fd failed");
+		goto cleanup;
+	}
+	if (!insecure)
+		wolfSSL_check_domain_name(ssl, parsed->host);
+
+	fw_audit_set_sigill_stage("https:wolfssl_connect");
+	while ((rc = wolfSSL_connect(ssl)) != WOLFSSL_SUCCESS) {
+		int err = wolfSSL_get_error(ssl, rc);
+		if (err != WOLFSSL_ERROR_WANT_READ && err != WOLFSSL_ERROR_WANT_WRITE &&
+		    err != WANT_READ && err != WANT_WRITE) {
+			if (errbuf && errbuf_len)
+				snprintf(errbuf, errbuf_len, "wolfSSL_connect failed: %d", err);
+			goto cleanup;
+		}
+	}
+
+	fp = fopen(output_path, "wb");
+	if (!fp) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "cannot open output file %s: %s", output_path, strerror(errno));
+		goto cleanup;
+	}
+
+	if (append_text(&request, &request_len, &request_cap, "GET ") != 0 ||
+	    append_text(&request, &request_len, &request_cap, parsed->path) != 0 ||
+	    append_text(&request, &request_len, &request_cap, " HTTP/1.1\r\nHost: ") != 0 ||
+	    append_text(&request, &request_len, &request_cap, parsed->host) != 0 ||
+	    append_text(&request, &request_len, &request_cap, "\r\nConnection: close\r\nAccept-Encoding: identity\r\n\r\n") != 0) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "failed to build HTTPS request");
+		goto cleanup;
+	}
+
+	if (verbose)
+		fprintf(stderr, "HTTPS GET request uri=%s -> file=%s insecure=%s (wolfssl)\n",
+			uri, output_path, insecure ? "true" : "false");
+
+	fw_audit_set_sigill_stage("https:wolfssl_write_request");
+	if ((rc = wolfSSL_write(ssl, request, (int)request_len)) <= 0) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "wolfSSL_write failed: %d", wolfSSL_get_error(ssl, rc));
+		goto cleanup;
+	}
+
+	fw_audit_set_sigill_stage("https:wolfssl_read_headers");
+	if (wolfssl_read_headers(ssl, &headers) != 0)
+		goto cleanup;
+	status = parse_status_code_from_headers(headers);
+	if (status < 200 || status >= 300) {
+		if (errbuf && errbuf_len)
+			snprintf(errbuf, errbuf_len, "HTTP status %d", status);
+		goto cleanup;
+	}
+
+	fw_audit_set_sigill_stage("https:wolfssl_read_body");
+	if (wolfssl_copy_response_body_to_file(ssl, fp) != 0)
+		goto cleanup;
+
+	free(headers);
+	free(request);
+	wolfSSL_shutdown(ssl);
+	wolfSSL_free(ssl);
+	wolfSSL_CTX_free(ctx);
+	if (sock >= 0)
+		close(sock);
+	if (fclose(fp) != 0) {
+		unlink(output_path);
+		return -1;
+	}
+	return 0;
+
+cleanup:
+	free(headers);
+	free(request);
+	if (fp)
+		fclose(fp);
+	unlink(output_path);
+	if (ssl) {
+		wolfSSL_shutdown(ssl);
+		wolfSSL_free(ssl);
+	}
+	if (ctx)
+		wolfSSL_CTX_free(ctx);
+	if (sock >= 0)
+		close(sock);
+	return -1;
+}
+
 const char *fw_audit_detect_isa(void)
 {
 	static char detected_isa[32];
@@ -852,18 +1130,6 @@ int fw_audit_emit_lifecycle_event(const char *output_format,
 		}
 	}
 
-	/*
-	 * On older PowerPC compatibility targets we have observed crashes only on the
-	 * HTTP lifecycle-event path, before the actual command runs. The lifecycle
-	 * event is informational and already emitted to stderr (and TCP if enabled),
-	 * so skip the extra plain-HTTP upload path here and preserve the actual
-	 * command-specific HTTP output path.
-	 */
-	if (output_http && *output_http) {
-		free(payload);
-		return 0;
-	}
-
 	if (output_uri && *output_uri) {
 		char *upload_uri = uboot_http_build_upload_uri(output_uri, "log", NULL);
 		if (!upload_uri) {
@@ -1032,6 +1298,7 @@ static CURLcode curl_ssl_ctx_load_embedded_ca(CURL *curl, void *sslctx, void *pa
 }
 
 static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
+					 bool insecure,
 					 SSL_CTX **ctx_out,
 					 SSL **ssl_out,
 					 int *sock_out,
@@ -1046,12 +1313,17 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 	if (!parsed || !ctx_out || !ssl_out || !sock_out)
 		return -1;
 
+	fw_audit_install_sigill_debug_handler();
+	fw_audit_set_sigill_stage("https:openssl_init");
+	fw_audit_force_conservative_powerpc_crypto_caps();
+
 	if (OPENSSL_init_ssl(0, NULL) != 1) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to initialize OpenSSL");
 		return -1;
 	}
 
+	fw_audit_set_sigill_stage("https:ssl_ctx_new");
 	ctx = SSL_CTX_new(TLS_client_method());
 	if (!ctx) {
 		if (errbuf && errbuf_len)
@@ -1059,10 +1331,26 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 		goto fail;
 	}
 
-	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
-	if (ssl_ctx_add_embedded_ca_store(SSL_CTX_get_cert_store(ctx), errbuf, errbuf_len) < 0)
-		goto fail;
+	SSL_CTX_set_verify(ctx, insecure ? SSL_VERIFY_NONE : SSL_VERIFY_PEER, NULL);
+	fw_audit_set_sigill_stage("https:set_tls12_only");
+	SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+	SSL_CTX_set_max_proto_version(ctx, TLS1_2_VERSION);
+	/*
+	 * Further narrow the handshake for PowerPC troubleshooting: avoid TLS 1.3
+	 * key share and signature negotiation, and prefer older broadly-supported
+	 * TLS 1.2 ciphers/curves so we can determine whether the SIGILL is in a
+	 * newer handshake primitive such as X25519/ChaCha20 or related code.
+	 */
+	SSL_CTX_set_cipher_list(ctx,
+		"ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:AES128-SHA");
+	SSL_CTX_set1_groups_list(ctx, "P-256");
+	if (!insecure) {
+		fw_audit_set_sigill_stage("https:load_ca_store");
+		if (ssl_ctx_add_embedded_ca_store(SSL_CTX_get_cert_store(ctx), errbuf, errbuf_len) < 0)
+			goto fail;
+	}
 
+	fw_audit_set_sigill_stage("https:tcp_connect");
 	sock = connect_tcp_host_port_any(parsed->host, parsed->port);
 	if (sock < 0) {
 		if (errbuf && errbuf_len)
@@ -1070,6 +1358,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 		goto fail;
 	}
 
+	fw_audit_set_sigill_stage("https:ssl_new");
 	ssl = SSL_new(ctx);
 	if (!ssl) {
 		if (errbuf && errbuf_len)
@@ -1077,6 +1366,7 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 		goto fail;
 	}
 
+	fw_audit_set_sigill_stage("https:set_sni");
 	if (SSL_set_tlsext_host_name(ssl, parsed->host) != 1) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to set TLS SNI hostname");
@@ -1084,29 +1374,37 @@ static int ssl_connect_with_embedded_ca(const struct parsed_http_uri *parsed,
 	}
 
 	vpm = SSL_get0_param(ssl);
-	X509_VERIFY_PARAM_set_hostflags(vpm, 0);
-	if (X509_VERIFY_PARAM_set1_host(vpm, parsed->host, 0) != 1) {
-		if (errbuf && errbuf_len)
-			snprintf(errbuf, errbuf_len, "failed to set TLS certificate hostname verification");
-		goto fail;
+	if (!insecure) {
+		fw_audit_set_sigill_stage("https:set_verify_host");
+		X509_VERIFY_PARAM_set_hostflags(vpm, 0);
+		if (X509_VERIFY_PARAM_set1_host(vpm, parsed->host, 0) != 1) {
+			if (errbuf && errbuf_len)
+				snprintf(errbuf, errbuf_len, "failed to set TLS certificate hostname verification");
+			goto fail;
+		}
 	}
 
 	SSL_set_fd(ssl, sock);
+	fw_audit_set_sigill_stage("https:ssl_connect");
 	if (SSL_connect(ssl) != 1) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "TLS handshake failed");
 		goto fail;
 	}
 
-	if (SSL_get_verify_result(ssl) != X509_V_OK) {
-		if (errbuf && errbuf_len)
-			snprintf(errbuf, errbuf_len, "TLS peer certificate verification failed");
-		goto fail;
+	if (!insecure) {
+		fw_audit_set_sigill_stage("https:verify_peer");
+		if (SSL_get_verify_result(ssl) != X509_V_OK) {
+			if (errbuf && errbuf_len)
+				snprintf(errbuf, errbuf_len, "TLS peer certificate verification failed");
+			goto fail;
+		}
 	}
 
 	*ctx_out = ctx;
 	*ssl_out = ssl;
 	*sock_out = sock;
+	fw_audit_set_sigill_stage("https:connected");
 	return 0;
 
 fail:
@@ -1236,6 +1534,7 @@ static int ssl_copy_response_body_to_file(SSL *ssl, const char *headers, FILE *f
 
 static int simple_https_get_to_file(const char *uri,
 				    const char *output_path,
+				    bool insecure,
 				    bool verbose,
 				    char *errbuf,
 				    size_t errbuf_len)
@@ -1257,9 +1556,18 @@ static int simple_https_get_to_file(const char *uri,
 		return -1;
 	}
 
-	if (ssl_connect_with_embedded_ca(&parsed, &ctx, &ssl, &sock, errbuf, errbuf_len) < 0)
+	if (isa_is_powerpc_family(fw_audit_detect_isa())) {
+		fw_audit_set_sigill_stage("https:wolfssl_fallback");
+		return simple_wolfssl_https_get_to_file(&parsed, uri, output_path, insecure,
+			verbose, errbuf, errbuf_len);
+	}
+
+	fw_audit_install_sigill_debug_handler();
+	fw_audit_set_sigill_stage("https:get:start");
+	if (ssl_connect_with_embedded_ca(&parsed, insecure, &ctx, &ssl, &sock, errbuf, errbuf_len) < 0)
 		return -1;
 
+	fw_audit_set_sigill_stage("https:get:fopen");
 	fp = fopen(output_path, "wb");
 	if (!fp) {
 		if (errbuf && errbuf_len)
@@ -1267,6 +1575,7 @@ static int simple_https_get_to_file(const char *uri,
 		goto fail;
 	}
 
+	fw_audit_set_sigill_stage("https:get:build_request");
 	if (append_text(&request, &request_len, &request_cap, "GET ") != 0 ||
 	    append_text(&request, &request_len, &request_cap, parsed.path) != 0 ||
 	    append_text(&request, &request_len, &request_cap, " HTTP/1.1\r\nHost: ") != 0 ||
@@ -1278,14 +1587,17 @@ static int simple_https_get_to_file(const char *uri,
 	}
 
 	if (verbose)
-		fprintf(stderr, "HTTPS GET request uri=%s -> file=%s insecure=false (openssl)\n", uri, output_path);
+		fprintf(stderr, "HTTPS GET request uri=%s -> file=%s insecure=%s (openssl)\n",
+			uri, output_path, insecure ? "true" : "false");
 
+	fw_audit_set_sigill_stage("https:get:write_request");
 	if (ssl_write_all(ssl, (const uint8_t *)request, request_len) != 0) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to send HTTPS request");
 		goto fail;
 	}
 
+	fw_audit_set_sigill_stage("https:get:read_headers");
 	if (ssl_read_headers(ssl, &headers) != 0) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "failed to read HTTPS response headers");
@@ -1293,6 +1605,7 @@ static int simple_https_get_to_file(const char *uri,
 	}
 
 	status = parse_status_code_from_headers(headers);
+	fw_audit_set_sigill_stage("https:get:read_body");
 	if (status < 200 || status >= 300) {
 		if (errbuf && errbuf_len)
 			snprintf(errbuf, errbuf_len, "HTTP status %d", status);
@@ -1305,6 +1618,7 @@ static int simple_https_get_to_file(const char *uri,
 		goto fail;
 	}
 
+	fw_audit_set_sigill_stage("https:get:done");
 	free(headers);
 	free(request);
 	SSL_shutdown(ssl);
@@ -1804,6 +2118,8 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 	if (normalized_uri)
 		effective_uri = normalized_uri;
 
+	fw_audit_force_conservative_powerpc_crypto_caps();
+
 	if (!curl_global_ready) {
 		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
 			if (errbuf && errbuf_len)
@@ -1926,10 +2242,13 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		return -1;
 	}
 
+	fw_audit_install_sigill_debug_handler();
+	fw_audit_set_sigill_stage("download-file:entry");
+
 	if (!strncmp(uri, "http://", 7))
 		return simple_http_get_to_file(uri, output_path, verbose, errbuf, errbuf_len);
-	if (!insecure && !strncmp(uri, "https://", 8))
-		return simple_https_get_to_file(uri, output_path, verbose, errbuf, errbuf_len);
+	if (!strncmp(uri, "https://", 8))
+		return simple_https_get_to_file(uri, output_path, insecure, verbose, errbuf, errbuf_len);
 
 	is_https = !strncmp(uri, "https://", 8);
 	if (!strncmp(uri, "http://", 7)) {
@@ -1949,6 +2268,9 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 	}
 	effective_uri = normalized_uri;
 
+	fw_audit_set_sigill_stage("download-file:curl_global_init");
+	fw_audit_force_conservative_powerpc_crypto_caps();
+
 	if (!curl_global_ready) {
 		if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
 			if (errbuf && errbuf_len)
@@ -1959,6 +2281,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		curl_global_ready = true;
 	}
 
+	fw_audit_set_sigill_stage("download-file:fopen");
 	fp = fopen(output_path, "wb");
 	if (!fp) {
 		if (errbuf && errbuf_len)
@@ -1967,6 +2290,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		return -1;
 	}
 
+	fw_audit_set_sigill_stage("download-file:curl_easy_init");
 	curl = curl_easy_init();
 	if (!curl) {
 		if (errbuf && errbuf_len)
@@ -1984,6 +2308,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 			insecure ? "true" : "false");
 	}
 
+	fw_audit_set_sigill_stage("download-file:curl_setopt");
 	curl_easy_setopt(curl, CURLOPT_URL, effective_uri);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_to_fp);
@@ -2012,6 +2337,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		}
 	}
 
+	fw_audit_set_sigill_stage("download-file:curl_perform");
 	rc = curl_easy_perform(curl);
 	if (rc != CURLE_OK) {
 		if (verbose)
@@ -2026,6 +2352,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 		return -1;
 	}
 
+	fw_audit_set_sigill_stage("download-file:curl_getinfo");
 	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 	curl_easy_cleanup(curl);
 
@@ -2052,6 +2379,7 @@ int uboot_http_get_to_file(const char *uri, const char *output_path,
 	if (verbose)
 		fprintf(stderr, "HTTP GET success uri=%s status=%ld\n", effective_uri, http_code);
 
+	fw_audit_set_sigill_stage("download-file:success");
 	free(normalized_uri);
 	return 0;
 }

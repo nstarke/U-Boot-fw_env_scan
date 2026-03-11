@@ -211,23 +211,19 @@ copy_repo_tree() {
   rm -rf "${repo_copy}"
   mkdir -p "${repo_copy}"
 
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -a \
-      --exclude '.git' \
-      --exclude '.tools' \
-      --exclude 'dist' \
-      --exclude 'api/data/release_binaries' \
-      --exclude '.build-release-static' \
-      "${ROOT_DIR}/" "${repo_copy}/"
-  else
-    cp -a "${ROOT_DIR}/." "${repo_copy}/"
-    rm -rf \
-      "${repo_copy}/.git" \
-      "${repo_copy}/.tools" \
-      "${repo_copy}/dist" \
-      "${repo_copy}/api/data/release_binaries" \
-      "${repo_copy}/.build-release-static"
-  fi
+  (
+    cd "${ROOT_DIR}" || exit 1
+    tar \
+      --exclude='.git' \
+      --exclude='.tools' \
+      --exclude='dist' \
+      --exclude='api/data/release_binaries' \
+      --exclude='.build-release-static' \
+      -cf - .
+  ) | (
+    cd "${repo_copy}" || exit 1
+    tar -xf -
+  )
 }
 
 write_status() {

@@ -79,6 +79,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install autotools for wolfSSL build
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool
+
       - name: Debug selected targets
         run: |
           echo "matrix.name=${{ matrix.name }}"

@@ -117,6 +117,11 @@ ifneq ($(strip $(COMPAT_CFLAGS)),)
 CMAKE_CC_ARGS += -DCMAKE_C_FLAGS="$(COMPAT_CFLAGS)"
 endif
 
+WOLFSSL_CONFIGURE_HOST_ARG :=
+ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
+WOLFSSL_CONFIGURE_HOST_ARG := --host=$(CMAKE_C_COMPILER_TARGET)
+endif
+
 CURL_CMAKE_ARGS := $(CMAKE_CC_ARGS)
 ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
 # curl's CMake feature probes are fragile for older cross targets under zig cc.
@@ -149,13 +154,13 @@ ifneq ($(filter $(COMPAT_CPU),powerpc powerpchf),)
 # builds. These targets have been hitting runtime illegal-instruction faults on
 # HTTP output paths, so disable optional subsystems and cache/IPC helpers that
 # are not required by this project's simple HTTP use case.
-CURL_CMAKE_ARGS += -DCURL_DISABLE_ALTSVC=ON -DCURL_DISABLE_HSTS=ON -DCURL_DISABLE_WEBSOCKETS=ON -DCURL_DISABLE_NTLM=ON -DCURL_DISABLE_PROXY=ON -DCURL_DISABLE_SOCKETPAIR=ON -DCURL_DISABLE_SHUFFLE_DNS=ON -DENABLE_UNIX_SOCKETS=OFF
+CURL_CMAKE_ARGS += -DCURL_DISABLE_ALTSVC=ON -DCURL_DISABLE_COOKIES=ON -DCURL_DISABLE_DICT=ON -DCURL_DISABLE_FILE=ON -DCURL_DISABLE_FTP=ON -DCURL_DISABLE_GOPHER=ON -DCURL_DISABLE_HSTS=ON -DCURL_DISABLE_IMAP=ON -DCURL_DISABLE_IPFS=ON -DCURL_DISABLE_LDAP=ON -DCURL_DISABLE_LDAPS=ON -DCURL_DISABLE_MIME=ON -DCURL_DISABLE_MQTT=ON -DCURL_DISABLE_NETRC=ON -DCURL_DISABLE_NTLM=ON -DCURL_DISABLE_POP3=ON -DCURL_DISABLE_PROXY=ON -DCURL_DISABLE_RTSP=ON -DCURL_DISABLE_SMB=ON -DCURL_DISABLE_SMTP=ON -DCURL_DISABLE_SOCKETPAIR=ON -DCURL_DISABLE_SHUFFLE_DNS=ON -DCURL_DISABLE_TELNET=ON -DCURL_DISABLE_TFTP=ON -DCURL_DISABLE_WEBSOCKETS=ON -DPICKY_COMPILER=OFF -DENABLE_UNIX_SOCKETS=OFF
 
 # Also make libcrypto/libssl as conservative as possible. These flags keep the
 # build focused on the minimal static TLS functionality curl needs while
 # avoiding extra provider/config/error/DSO code paths that may still exercise
 # problematic CPU-detection or runtime-init behavior on older PowerPC systems.
-OPENSSL_EXTRA_CONFIGURE_FLAGS += no-autoerrinit no-autoload-config no-atexit no-dso no-legacy no-stdio
+OPENSSL_EXTRA_CONFIGURE_FLAGS += no-autoerrinit no-autoload-config no-atexit no-cmp no-comp no-dgram no-dso no-engine no-legacy no-ocsp no-psk no-srp no-srtp no-ssl3 no-stdio no-tls1 no-tls1_1 no-ui-console no-weak-ssl-ciphers
 endif
 
 JSONC_CMAKE_ARGS := $(CMAKE_CC_ARGS)
@@ -195,6 +200,10 @@ CURL_DIR      := third_party/curl
 CURL_BUILD    := $(CURL_DIR)/build-$(CC_TAG)
 CURL_LIB      := $(CURL_BUILD)/lib/libcurl.a
 CURL_CFLAGS   := -I$(CURL_DIR)/include
+WOLFSSL_DIR   := third_party/wolfssl
+WOLFSSL_BUILD := $(WOLFSSL_DIR)/build-$(CC_TAG)
+WOLFSSL_LIB   := $(WOLFSSL_BUILD)/src/.libs/libwolfssl.a
+WOLFSSL_CFLAGS := -I$(WOLFSSL_DIR) -I$(WOLFSSL_BUILD)
 OPENSSL_DIR   := third_party/openssl
 OPENSSL_BUILD := $(OPENSSL_DIR)/build-$(CC_TAG)
 OPENSSL_INSTALL := $(OPENSSL_BUILD)/install
@@ -231,6 +240,7 @@ CFLAGS += $(LIBEFIVAR_CFLAGS)
 CFLAGS += $(ZLIB_CFLAGS)
 CFLAGS += $(JSONC_CFLAGS)
 CFLAGS += $(CURL_CFLAGS)
+CFLAGS += $(WOLFSSL_CFLAGS)
 CFLAGS += $(OPENSSL_CFLAGS)
 CFLAGS += $(COMPAT_CFLAGS)
 CFLAGS += -I.
@@ -284,10 +294,21 @@ $(ZLIB_LIB):
 	cmake --build $(ZLIB_BUILD) --parallel $(JOBS) --target zlibstatic
 
 $(CURL_LIB): $(OPENSSL_SSL_LIB)
-	cmake -S $(CURL_DIR) -B $(CURL_BUILD) $(CURL_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DBUILD_TESTING=OFF -DCURL_USE_OPENSSL=ON -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_SSL_LIBRARY="$(abspath $(OPENSSL_SSL_LIB))" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))" -DCURL_ZLIB=OFF -DUSE_LIBIDN2=OFF -DUSE_NGHTTP2=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF -DENABLE_ARES=OFF -DENABLE_THREADED_RESOLVER=OFF -DCURL_USE_LIBPSL=OFF -DCURL_USE_LIBSSH2=OFF -DCURL_DISABLE_NETRC=ON -DHTTP_ONLY=ON
+	cmake -S $(CURL_DIR) -B $(CURL_BUILD) $(CURL_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_CURL_EXE=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_MISC_DOCS=OFF -DBUILD_TESTING=OFF -DCURL_USE_OPENSSL=ON -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_SSL_LIBRARY="$(abspath $(OPENSSL_SSL_LIB))" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))" -DCURL_ZLIB=OFF -DUSE_LIBIDN2=OFF -DUSE_NGHTTP2=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF -DENABLE_ARES=OFF -DENABLE_THREADED_RESOLVER=OFF -DCURL_USE_LIBPSL=OFF -DCURL_USE_LIBSSH2=OFF -DUSE_ECH=OFF -DUSE_NTLM=OFF -DUSE_OPENLDAP=OFF -DUSE_LIBRTMP=OFF -DUSE_WEBSOCKETS=OFF -DCURL_DISABLE_NETRC=ON -DHTTP_ONLY=ON
 	cmake --build $(CURL_BUILD) --parallel $(JOBS) --target libcurl_static
 
 $(OPENSSL_LIB): $(OPENSSL_SSL_LIB)
+
+$(WOLFSSL_LIB):
+	mkdir -p $(WOLFSSL_BUILD)
+	cd $(WOLFSSL_DIR) && ./autogen.sh
+	cd $(WOLFSSL_BUILD) && $(abspath $(WOLFSSL_DIR))/configure \
+		CC="$(CC)" CFLAGS="$(COMPAT_CFLAGS)" \
+		$(WOLFSSL_CONFIGURE_HOST_ARG) \
+		--enable-static --disable-shared --disable-benchmark --disable-examples \
+		--disable-crypttests --disable-dtls --disable-oldtls --disable-tls13 \
+		--disable-tls13 --enable-sni --prefix="$(abspath $(WOLFSSL_BUILD))/install"
+	$(MAKE) -C $(WOLFSSL_BUILD) -j$(JOBS)
 
 $(OPENSSL_SSL_LIB):
 	mkdir -p $(OPENSSL_BUILD)
@@ -325,8 +346,8 @@ $(READLINE_BUILD_STAMP):
 	$(MAKE) -C $(READLINE_DIR) -j$(JOBS) libreadline.a libhistory.a
 	touch $@
 
-$(TARGET): $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_BUILD_STAMP) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
-	$(CC) $(CFLAGS) -o $@ $(SRC) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_LIB) $(ZLIB_LIB) $(JSONC_LIB) $(CURL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(LDFLAGS) $(LDLIBS)
+$(TARGET): $(SRC) $(ZLIB_LIB) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_BUILD_STAMP) $(JSONC_LIB) $(CURL_LIB) $(WOLFSSL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(READLINE_DEPS)
+	$(CC) $(CFLAGS) -o $@ $(SRC) $(LIBUBOOTENV_LIB) $(LIBEFIVAR_LIB) $(ZLIB_LIB) $(JSONC_LIB) $(CURL_LIB) $(WOLFSSL_LIB) $(OPENSSL_SSL_LIB) $(OPENSSL_LIB) $(LDFLAGS) $(LDLIBS)
 
 static: LDFLAGS += -static
 static: all
@@ -343,6 +364,7 @@ clean:
 	rm -f $(LIBEFIVAR_BUILD_STAMP)
 	rm -rf $(ZLIB_DIR)/build*
 	rm -rf $(CURL_DIR)/build*
+	rm -rf $(WOLFSSL_DIR)/build*
 	-cd $(OPENSSL_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
 	rm -rf $(OPENSSL_BUILD)
 	-cd $(NCURSES_DIR) && $(MAKE) distclean >/dev/null 2>&1 || true
