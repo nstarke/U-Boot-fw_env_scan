@@ -6,22 +6,9 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 BIN="/tmp/embedded_linux_audit"
 
 TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
-TEST_OUTPUT_HTTP="${TEST_OUTPUT_HTTP:-}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --output-http)
-            if [ "$#" -lt 2 ]; then
-                echo "error: --output-http requires a value"
-                exit 2
-            fi
-            TEST_OUTPUT_HTTP="$2"
-            shift 2
-            ;;
-        --output-http=*)
-            TEST_OUTPUT_HTTP="${1#*=}"
-            shift
-            ;;
         --output-http)
             if [ "$#" -lt 2 ]; then
                 echo "error: --output-http requires a value"
@@ -41,12 +28,6 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-if [ -n "$TEST_OUTPUT_HTTP" ] && [ -n "$TEST_OUTPUT_HTTP" ]; then
-    echo "error: set only one of --output-http or --output-http"
-    exit 2
-fi
-
-export TEST_OUTPUT_HTTP
 export TEST_OUTPUT_HTTP
 
 # shellcheck source=tests/agent/common.sh
@@ -90,8 +71,8 @@ run_exact_case "linux list-files --help" 0 "$BIN" linux list-files --help
 run_exact_case "linux list-files relative path" 2 "$BIN" linux list-files ./relative
 run_exact_case "linux list-files file path" 2 "$BIN" linux list-files "$TMP_FILE"
 run_exact_case "linux list-files invalid global --output-http" 2 "$BIN" --output-http ftp://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
-run_exact_case "linux list-files invalid global --output-http" 2 "$BIN" --output-http http://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
-run_exact_case "linux list-files both global http+https" 2 "$BIN" --output-http http://127.0.0.1:1/file-list --output-http https://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
+run_exact_case "linux list-files valid global --output-http" 1 "$BIN" --output-http http://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
+run_accept_case "linux list-files repeated global --output-http" "$BIN" --output-http http://127.0.0.1:1/file-list --output-http https://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
 run_exact_case "linux list-files invalid global --output-tcp" 2 "$BIN" --output-tcp invalid-target linux list-files "$TMP_DIR"
 run_exact_case "linux list-files extra positional argument" 2 "$BIN" linux list-files "$TMP_DIR" /tmp/extra
 run_exact_case "linux list-files invalid --permissions" 2 "$BIN" linux list-files "$TMP_DIR" --permissions invalid
@@ -109,7 +90,7 @@ run_exact_case "linux list-files --permissions symbolic" 0 "$BIN" linux list-fil
 run_exact_case "linux list-files --user" 0 "$BIN" linux list-files "$TMP_DIR" --user "$CURRENT_USER"
 run_exact_case "linux list-files --group" 0 "$BIN" linux list-files "$TMP_DIR" --group "$CURRENT_GROUP"
 run_accept_case "linux list-files global --output-http" "$BIN" --output-http http://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
-run_accept_case "linux list-files global --output-http" "$BIN" --output-http https://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
+run_accept_case "linux list-files global --output-http (https URI)" "$BIN" --output-http https://127.0.0.1:1/file-list linux list-files "$TMP_DIR"
 
 python_bin="$(find_python_bin || true)"
 
@@ -175,7 +156,7 @@ PY
 
     http_post_log="$(mktemp /tmp/test_list_files_http_post.XXXXXX)"
     if [ "$ready" -eq 1 ]; then
-        "$BIN" --output-http "http://127.0.0.1:$http_port" linux list-files "$TMP_DIR" >"$http_post_log" 2>&1
+        "$BIN" --quiet --output-http "http://127.0.0.1:$http_port" linux list-files "$TMP_DIR" >"$http_post_log" 2>&1
         rc=$?
         wait "$http_server_pid" 2>/dev/null || true
 
