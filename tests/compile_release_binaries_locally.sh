@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 DEST_RELEASE_DIR="$REPO_ROOT/api/data/release_binaries"
 TOOLS_CACHE_DIR="$REPO_ROOT/.cache/tools"
-ZIG_VERSION="0.13.0"
+ZIG_VERSION="0.14.0"
 SUPPORTED_ISAS="arm32-le arm32-be aarch64-le aarch64-be mips-le mips-be mips64-le mips64-be powerpc-le powerpc-be x86 x86_64 riscv32 riscv64"
 
 usage() {
@@ -72,9 +72,11 @@ ensure_zig() {
     case "$host_arch" in
         x86_64|amd64)
             zig_host="x86_64-linux"
+            zig_download_host="linux-x86_64"
             ;;
         aarch64|arm64)
             zig_host="aarch64-linux"
+            zig_download_host="linux-aarch64"
             ;;
         *)
             echo "error: zig not found on PATH and automatic Zig download is unsupported on host arch: $host_arch" >&2
@@ -86,12 +88,12 @@ ensure_zig() {
     zig_bin="$zig_dir/zig"
 
     if [ ! -x "$zig_bin" ]; then
-        archive_name="zig-$zig_host-$ZIG_VERSION.tar.xz"
+        archive_name="zig-$zig_download_host-$ZIG_VERSION.tar.xz"
         archive_url="https://ziglang.org/download/$ZIG_VERSION/$archive_name"
         tmp_dir="$TOOLS_CACHE_DIR/zig/tmp"
         archive_path="$tmp_dir/$archive_name"
         extract_dir="$tmp_dir/extract-$zig_host-$ZIG_VERSION"
-        extracted_root="$extract_dir/zig-$zig_host-$ZIG_VERSION"
+        extracted_root="$extract_dir/zig-$zig_download_host-$ZIG_VERSION"
 
         echo "zig not found on PATH; downloading Zig $ZIG_VERSION for $zig_host"
         mkdir -p "$tmp_dir"
