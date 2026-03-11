@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=tests/system_package_helpers.sh
 . "$SCRIPT_DIR/system_package_helpers.sh"
 
-DEST_RELEASE_DIR="$REPO_ROOT/api/data/release_binaries"
+DEST_RELEASE_DIR="${RELEASE_BINARIES_DIR:-$REPO_ROOT/api/data/release_binaries}"
 TOOLS_CACHE_DIR="$REPO_ROOT/.cache/tools"
 ZIG_VERSION="0.14.0"
 SUPPORTED_ISAS="arm32-le arm32-be aarch64-le aarch64-be mips-le mips-be mips64-le mips64-be powerpc-le powerpc-be x86 x86_64 riscv32 riscv64"
