@@ -103,8 +103,6 @@ jobs:
             bubblewrap \
             cmake \
             libtool \
-            qemu-user \
-            qemu-user-binfmt \
             qemu-user-static \
             xz-utils
 
