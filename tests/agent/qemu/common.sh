@@ -315,6 +315,7 @@ run_qemu_binary_tests() {
     use_bwrap="$6"
 
     rc=0
+    rootfs_dir=""
 
     cleanup_qemu_binary_wrapper() {
         if [ -n "${rootfs_dir:-}" ]; then
@@ -351,14 +352,25 @@ run_qemu_binary_tests() {
     find "$script_list_root" -type f -name '*.ela' | sort >"$script_list_file"
 
     while IFS= read -r script_file; do
-        case "$script_file" in
-            "$TEST_SCRIPTS_DIR/linux/test_linux_ssh_args.ela"|"$rootfs_dir/tests/agent/scripts/linux/test_linux_ssh_args.ela")
-                echo
-                echo "===== Skipping ${script_file#"$TEST_SCRIPTS_DIR"/} ====="
-                echo "Skipping SSH script coverage under QEMU; it depends on a reachable/authenticating SSH server and can hang in CI."
-                continue
-                ;;
-        esac
+        if [ "$use_bwrap" -eq 1 ]; then
+            case "$script_file" in
+                "$rootfs_dir/tests/agent/scripts/linux/test_linux_ssh_args.ela")
+                    echo
+                    echo "===== Skipping /tests/agent/scripts/linux/test_linux_ssh_args.ela ====="
+                    echo "Skipping SSH script coverage under QEMU; it depends on a reachable/authenticating SSH server and can hang in CI."
+                    continue
+                    ;;
+            esac
+        else
+            case "$script_file" in
+                "$TEST_SCRIPTS_DIR/linux/test_linux_ssh_args.ela")
+                    echo
+                    echo "===== Skipping ${script_file#"$TEST_SCRIPTS_DIR"/} ====="
+                    echo "Skipping SSH script coverage under QEMU; it depends on a reachable/authenticating SSH server and can hang in CI."
+                    continue
+                    ;;
+            esac
+        fi
         script_log="$(mktemp /tmp/ela-qemu-script-log.${isa}.XXXXXX)"
         if [ "$use_bwrap" -eq 1 ]; then
             script_path="/tests/agent/scripts/${script_file#"$rootfs_dir/tests/agent/scripts"/}"
