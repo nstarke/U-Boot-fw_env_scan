@@ -201,6 +201,31 @@ ifneq ($(filter $(COMPAT_CPU),arm32 armeb powerpc powerpchf),)
 JSONC_CMAKE_ARGS += -DENABLE_THREADING=OFF
 endif
 
+LIBSSH_EXTRA_CFLAGS := $(COMPAT_CFLAGS)
+LIBSSH_CMAKE_ARGS := $(CMAKE_CC_ARGS)
+ifneq ($(strip $(LIBSSH_EXTRA_CFLAGS)),)
+LIBSSH_CMAKE_ARGS += -DCMAKE_C_FLAGS="$(LIBSSH_EXTRA_CFLAGS)"
+endif
+ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
+# libssh's FIPS_mode() probe can mis-detect availability when cross-compiling
+# against our bundled OpenSSL 3.x, which then breaks the actual compile because
+# OpenSSL 3 removed the legacy FIPS_mode() declaration. Seed the cache result so
+# libssh uses its OpenSSL 3 code path instead.
+LIBSSH_CMAKE_ARGS += -DHAVE_OPENSSL_FIPS_MODE=0
+endif
+ifneq ($(findstring zig cc,$(CC)),)
+# Clang treats old-style function definitions as strict-prototypes warnings, and
+# libssh promotes that warning to an error in some cross builds. Keep the build
+# otherwise strict, but avoid failing on this third-party warning in submodule
+# sources we do not patch locally.
+LIBSSH_EXTRA_CFLAGS += -Wno-strict-prototypes
+LIBSSH_CMAKE_ARGS := $(CMAKE_CC_ARGS)
+LIBSSH_CMAKE_ARGS += -DCMAKE_C_FLAGS="$(LIBSSH_EXTRA_CFLAGS)"
+ifneq ($(strip $(CMAKE_C_COMPILER_TARGET)),)
+LIBSSH_CMAKE_ARGS += -DHAVE_OPENSSL_FIPS_MODE=0
+endif
+endif
+
 LIBCSV_DIR    := third_party/libcsv
 LIBCSV_SRC    := $(LIBCSV_DIR)/libcsv.c
 LIBCSV_CFLAGS := -I$(LIBCSV_DIR)
@@ -340,7 +365,23 @@ $(CURL_LIB): $(OPENSSL_SSL_LIB)
 	cmake --build $(CURL_BUILD) --parallel $(JOBS) --target libcurl_static
 
 $(LIBSSH_LIB): $(OPENSSL_SSL_LIB) $(ZLIB_LIB)
-	cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD) $(CMAKE_CC_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIB=ON -DWITH_EXAMPLES=OFF -DUNIT_TESTING=OFF -DCLIENT_TESTING=OFF -DSERVER_TESTING=OFF -DWITH_SERVER=OFF -DWITH_GSSAPI=OFF -DWITH_NACL=OFF -DWITH_ZLIB=ON -DZLIB_INCLUDE_DIR="$(abspath $(ZLIB_DIR))" -DZLIB_LIBRARY="$(abspath $(ZLIB_LIB))" -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))"
+	cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD) $(LIBSSH_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIB=ON -DWITH_EXAMPLES=OFF -DUNIT_TESTING=OFF -DCLIENT_TESTING=OFF -DSERVER_TESTING=OFF -DWITH_SERVER=OFF -DWITH_GSSAPI=OFF -DWITH_NACL=OFF -DWITH_ZLIB=ON -DZLIB_INCLUDE_DIR="$(abspath $(ZLIB_DIR))" -DZLIB_LIBRARY="$(abspath $(ZLIB_LIB))" -DOPENSSL_ROOT_DIR="$(abspath $(OPENSSL_INSTALL))" -DOPENSSL_INCLUDE_DIR="$(abspath $(OPENSSL_INSTALL))/include" -DOPENSSL_CRYPTO_LIBRARY="$(abspath $(OPENSSL_LIB))"
+	python3 - <<'PY'
+from pathlib import Path
+
+build = Path("$(LIBSSH_BUILD)")
+for rel in [
+    Path("src/CMakeFiles/ssh-static.dir/flags.make"),
+    Path("src/CMakeFiles/ssh.dir/flags.make"),
+]:
+    p = build / rel
+    if not p.exists():
+        continue
+    text = p.read_text()
+    text = text.replace("-Werror=strict-prototypes", "-Wno-error=strict-prototypes")
+    text = text.replace("-Wstrict-prototypes", "-Wno-strict-prototypes")
+    p.write_text(text)
+PY
 	cmake --build $(LIBSSH_BUILD) --parallel $(JOBS) --target ssh-static
 
 $(OPENSSL_LIB): $(OPENSSL_SSL_LIB)
