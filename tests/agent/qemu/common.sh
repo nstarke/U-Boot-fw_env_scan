@@ -164,7 +164,12 @@ create_chroot_tree() {
         cp "$qemu_static_path" "$rootfs_dir/usr/bin/$(basename "$qemu_static_path")"
     fi
 
-    cp "$TEST_SCRIPTS_DIR"/*.ela "$rootfs_dir/tests/agent/scripts/"
+    find "$TEST_SCRIPTS_DIR" -type f -name '*.ela' | while IFS= read -r script_file; do
+        relative_path="${script_file#"$TEST_SCRIPTS_DIR"/}"
+        dest_path="$rootfs_dir/tests/agent/scripts/$relative_path"
+        mkdir -p "$(dirname "$dest_path")"
+        cp "$script_file" "$dest_path"
+    done
 
     cat >"$rootfs_dir/etc/passwd" <<EOF_PASSWD
 root:x:0:0:root:/root:/bin/sh
@@ -245,11 +250,11 @@ run_qemu_binary_tests() {
     echo "Release binary: $binary_path"
     echo "Chroot rootfs: $rootfs_dir"
 
-    for script_file in "$rootfs_dir"/tests/agent/scripts/*.ela; do
-        script_path="/tests/agent/scripts/$(basename "$script_file")"
+    find "$rootfs_dir/tests/agent/scripts" -type f -name '*.ela' | sort | while IFS= read -r script_file; do
+        script_path="/tests/agent/scripts/${script_file#"$rootfs_dir/tests/agent/scripts"/}"
         script_log="$(mktemp /tmp/ela-qemu-script-log.${isa}.XXXXXX)"
         echo
-        echo "===== Running $(basename "$script_file") ====="
+        echo "===== Running ${script_path#/tests/agent/scripts/} ====="
         run_qemu_script_in_chroot "$qemu_mode" "$(basename "$qemu_runner")" "$rootfs_dir" "$script_path" "$@" >"$script_log" 2>&1
         script_rc=$?
         print_file_scrubbed "$script_log"
@@ -281,7 +286,7 @@ run_qemu_isa_tests() {
     ensure_release_binaries "$isa"
     require_command bwrap
     require_file "$binary_path"
-    require_file "$TEST_SCRIPTS_DIR/test_linux_dmesg_args.ela"
+    require_file "$TEST_SCRIPTS_DIR/linux/test_linux_dmesg_args.ela"
 
     qemu_resolution="$(resolve_qemu_mode "$qemu_static_cmd" "$qemu_binfmt_cmd")"
     qemu_mode="${qemu_resolution%%:*}"

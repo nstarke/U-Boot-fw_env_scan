@@ -3,10 +3,11 @@
 set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+SHELL_TEST_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BIN="${BIN:-/tmp/embedded_linux_audit}"
 
 # shellcheck source=tests/agent/shell/common.sh
-. "$SCRIPT_DIR/common.sh"
+. "$SHELL_TEST_ROOT/common.sh"
 
 require_binary "$BIN"
 print_section "linux download-file subcommand argument coverage"

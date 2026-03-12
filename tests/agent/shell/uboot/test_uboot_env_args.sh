@@ -2,6 +2,7 @@
 
 set -u
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+SHELL_TEST_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 BIN="${BIN:-/tmp/embedded_linux_audit}"
 
@@ -31,7 +32,7 @@ done
 export TEST_OUTPUT_HTTP
 
 # shellcheck source=tests/agent/shell/common.sh
-. "$SCRIPT_DIR/common.sh"
+. "$SHELL_TEST_ROOT/common.sh"
 
 require_binary "$BIN"
 print_section "uboot env subcommand argument coverage"

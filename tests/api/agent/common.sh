@@ -3,7 +3,7 @@
 set -u
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 
 # shellcheck source=tests/system_package_helpers.sh
 . "$REPO_ROOT/tests/system_package_helpers.sh"
@@ -46,8 +46,7 @@ scrub_sensitive_stream() {
         printf '%s\n' "$line" | sed -E \
             -e 's/(([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])[[:space:]]*[:=][[:space:]]*)[^[:space:],;"}]+/\1<REDACTED>/g' \
             -e 's/(([?&]([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]))=)[^&[:space:]]+/\1<REDACTED>/g' \
-            -e 's/(("([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])"[[:space:]]*:[[:space:]]*")[^"]+/
-\1<REDACTED>/g'
+            -e 's/(("([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])"[[:space:]]*:[[:space:]]*")[^"]+)/\1<REDACTED>/g'
     done
 }
 
@@ -117,7 +116,7 @@ require_web_test_tools() {
 
 create_web_test_layout() {
     TEST_WEB_TMPDIR="$(mktemp -d /tmp/fw_web_tests.XXXXXX)"
-    mkdir -p "$TEST_WEB_TMPDIR/assets" "$TEST_WEB_TMPDIR/data/env" "$TEST_WEB_TMPDIR/tests/agent/shell" "$TEST_WEB_TMPDIR/tests/agent/scripts" "$TEST_WEB_TMPDIR/tests/api" "$TEST_WEB_TMPDIR/tests/scripts"
+    mkdir -p "$TEST_WEB_TMPDIR/assets" "$TEST_WEB_TMPDIR/data/env" "$TEST_WEB_TMPDIR/tests/agent/shell" "$TEST_WEB_TMPDIR/tests/agent/scripts/linux" "$TEST_WEB_TMPDIR/tests/api" "$TEST_WEB_TMPDIR/tests/scripts"
 
     printf 'asset-one\n' > "$TEST_WEB_TMPDIR/assets/ela-arm64"
     printf 'asset-two\n' > "$TEST_WEB_TMPDIR/assets/custom-tool.bin"
@@ -125,7 +124,7 @@ create_web_test_layout() {
     mkdir -p "$TEST_WEB_TMPDIR/assets/not_a_file"
 
     printf '#!/bin/sh\necho test-one\n' > "$TEST_WEB_TMPDIR/tests/agent/shell/test_one.sh"
-    printf 'linux dmesg\n' > "$TEST_WEB_TMPDIR/tests/agent/scripts/test_linux_dmesg_args.ela"
+    printf 'linux dmesg\n' > "$TEST_WEB_TMPDIR/tests/agent/scripts/linux/test_linux_dmesg_args.ela"
     printf 'linux execute-command "echo scripted"\nlinux execute-command "printf second"\n' > "$TEST_WEB_TMPDIR/tests/scripts/sample-script.txt"
     printf '#!/bin/sh\necho test-two\n' > "$TEST_WEB_TMPDIR/tests/api/test_two.sh"
     mkdir -p "$TEST_WEB_TMPDIR/tests/scripts/not_a_file"

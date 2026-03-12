@@ -31,25 +31,46 @@ module.exports = function registerRootRoute(app, deps) {
     return dirs;
   }
 
+  async function collectAgentTestFiles(rootDir, suffix, currentDir = rootDir, relativePrefix = '') {
+    const dirEntries = await fsp.readdir(currentDir, { withFileTypes: true }).catch(() => []);
+    const files = [];
+
+    for (const entry of dirEntries) {
+      const entryPath = deps.path.join(currentDir, entry.name);
+      const relativePath = relativePrefix ? `${relativePrefix}/${entry.name}` : entry.name;
+
+      if (entry.isDirectory()) {
+        files.push(...await collectAgentTestFiles(rootDir, suffix, entryPath, relativePath));
+        continue;
+      }
+
+      if (entry.isFile() && entry.name.endsWith(suffix)) {
+        files.push(relativePath);
+      }
+    }
+
+    return files;
+  }
+
   async function listAgentTestEntries() {
     const entries = [];
 
     for (const [type, meta] of Object.entries(agentTestTypeMeta)) {
-      const byName = new Map();
+      const byPath = new Map();
       for (const dir of getAgentTestDirs(type)) {
-        const dirEntries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
-        for (const entry of dirEntries) {
-          if (!entry.isFile() || !entry.name.endsWith(meta.suffix) || byName.has(entry.name)) {
+        const relativePaths = await collectAgentTestFiles(dir, meta.suffix);
+        for (const relativePath of relativePaths) {
+          if (byPath.has(relativePath)) {
             continue;
           }
-          byName.set(entry.name, {
-            name: entry.name,
-            pathLabel: `${meta.labelPrefix}${entry.name}`,
-            url: `/tests/agent/${encodeURIComponent(type)}/${encodeURIComponent(entry.name)}`
+          byPath.set(relativePath, {
+            name: relativePath,
+            pathLabel: `${meta.labelPrefix}${relativePath}`,
+            url: `/tests/agent/${encodeURIComponent(type)}/${relativePath.split('/').map((segment) => encodeURIComponent(segment)).join('/')}`
           });
         }
       }
-      entries.push(...byName.values());
+      entries.push(...byPath.values());
     }
 
     return entries.sort((a, b) => a.pathLabel.localeCompare(b.pathLabel));

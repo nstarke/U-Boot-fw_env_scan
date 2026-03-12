@@ -1,8 +1,9 @@
 # Tests
 
-This repository includes shell-based argument coverage tests under `tests/agent/shell/`.
+This repository includes shell-based argument coverage tests under `tests/agent/shell/` and script-based coverage files under `tests/agent/scripts/`.
 
-- `tests/agent/shell/` contains the existing agent shell tests.
+- `tests/agent/shell/efi/`, `tests/agent/shell/linux/`, and `tests/agent/shell/uboot/` contain shell argument tests grouped by subsystem, while shared helpers remain at `tests/agent/shell/`.
+- `tests/agent/scripts/efi/`, `tests/agent/scripts/linux/`, and `tests/agent/scripts/uboot/` contain `.ela` script coverage files grouped by subsystem.
 - `tests/api/agent/` is reserved for api-related tests.
 
 ## Prerequisites
@@ -30,26 +31,26 @@ bash tests/agent/shell/test_all.sh
 ```
 
 `test_all.sh` executes:
-- `tests/agent/shell/test_uboot_env_args.sh`
-- `tests/agent/shell/test_uboot_image_args.sh`
-- `tests/agent/shell/test_uboot_audit_args.sh`
-- `tests/agent/shell/test_linux_dmesg_args.sh`
-- `tests/agent/shell/test_linux_list_files_args.sh`
-- `tests/agent/shell/test_linux_remote_copy_args.sh`
-- `tests/agent/shell/test_efi_bios_orom_args.sh`
+- `tests/agent/shell/uboot/test_uboot_env_args.sh`
+- `tests/agent/shell/uboot/test_uboot_image_args.sh`
+- `tests/agent/shell/uboot/test_uboot_audit_args.sh`
+- `tests/agent/shell/linux/test_linux_dmesg_args.sh`
+- `tests/agent/shell/linux/test_linux_list_files_args.sh`
+- `tests/agent/shell/linux/test_linux_remote_copy_args.sh`
+- `tests/agent/shell/efi/test_efi_bios_orom_args.sh`
 
 It returns non-zero if any test group fails.
 
 ## Run individual test groups
 
 ```bash
-sh tests/agent/shell/test_uboot_env_args.sh
-sh tests/agent/shell/test_uboot_image_args.sh
-sh tests/agent/shell/test_uboot_audit_args.sh
-sh tests/agent/shell/test_linux_dmesg_args.sh
-sh tests/agent/shell/test_linux_list_files_args.sh
-sh tests/agent/shell/test_linux_remote_copy_args.sh
-sh tests/agent/shell/test_efi_bios_orom_args.sh
+sh tests/agent/shell/uboot/test_uboot_env_args.sh
+sh tests/agent/shell/uboot/test_uboot_image_args.sh
+sh tests/agent/shell/uboot/test_uboot_audit_args.sh
+sh tests/agent/shell/linux/test_linux_dmesg_args.sh
+sh tests/agent/shell/linux/test_linux_list_files_args.sh
+sh tests/agent/shell/linux/test_linux_remote_copy_args.sh
+sh tests/agent/shell/efi/test_efi_bios_orom_args.sh
 ```
 
 ## What each test script covers

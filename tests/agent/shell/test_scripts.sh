@@ -50,7 +50,7 @@ start_remote_http_server() {
     }
 
     REMOTE_HTTP_SERVER_TMPDIR="$(mktemp -d /tmp/ela_remote_script.XXXXXX)"
-    cp "$SCRIPTS_DIR/test_linux_dmesg_args.ela" "$REMOTE_HTTP_SERVER_TMPDIR/remote_test_linux_dmesg_args.ela"
+    cp "$SCRIPTS_DIR/linux/test_linux_dmesg_args.ela" "$REMOTE_HTTP_SERVER_TMPDIR/remote_test_linux_dmesg_args.ela"
 
     REMOTE_HTTP_SERVER_LOG="$REMOTE_HTTP_SERVER_TMPDIR/http.log"
     "$python_bin" -m http.server 5320 --bind 127.0.0.1 --directory "$REMOTE_HTTP_SERVER_TMPDIR" >"$REMOTE_HTTP_SERVER_LOG" 2>&1 &
@@ -85,7 +85,7 @@ start_remote_api_server() {
 
     REMOTE_API_SERVER_TMPDIR="$(mktemp -d /tmp/ela_remote_api_script.XXXXXX)"
     mkdir -p "$REMOTE_API_SERVER_TMPDIR/scripts"
-    cp "$SCRIPTS_DIR/test_linux_dmesg_args.ela" "$REMOTE_API_SERVER_TMPDIR/scripts/fallback_test_linux_dmesg_args.ela"
+    cp "$SCRIPTS_DIR/linux/test_linux_dmesg_args.ela" "$REMOTE_API_SERVER_TMPDIR/scripts/fallback_test_linux_dmesg_args.ela"
 
     REMOTE_API_SERVER_LOG="$REMOTE_API_SERVER_TMPDIR/http.log"
     "$python_bin" -m http.server 5321 --bind 127.0.0.1 --directory "$REMOTE_API_SERVER_TMPDIR" >"$REMOTE_API_SERVER_LOG" 2>&1 &
@@ -137,20 +137,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-for test_script in \
-    "$SCRIPTS_DIR/test_efi_dump_vars_args.ela" \
-    "$SCRIPTS_DIR/test_linux_dmesg_args.ela" \
-    "$SCRIPTS_DIR/test_linux_download_file_args.ela" \
-    "$SCRIPTS_DIR/test_linux_execute_command_args.ela" \
-    "$SCRIPTS_DIR/test_linux_grep_args.ela" \
-    "$SCRIPTS_DIR/test_linux_list_files_args.ela" \
-    "$SCRIPTS_DIR/test_linux_list_symlinks_args.ela" \
-    "$SCRIPTS_DIR/test_linux_remote_copy_args.ela" \
-    "$SCRIPTS_DIR/test_efi_bios_orom_args.ela" \
-    "$SCRIPTS_DIR/test_uboot_audit_args.ela" \
-    "$SCRIPTS_DIR/test_uboot_image_args.ela" \
-    "$SCRIPTS_DIR/test_uboot_env_args.ela"
-do
+find "$SCRIPTS_DIR" -type f -name '*.ela' | sort | while IFS= read -r test_script; do
     run_accept_case "script $(basename "$test_script")" "$BIN" --script "$test_script"
 done
 

@@ -66,9 +66,9 @@ jobs:
         run: |
           set -euo pipefail
           rc=0
-          for script in tests/agent/scripts/*.ela; do
+          while IFS= read -r script; do
             echo
-            echo "===== Running $(basename "$script") ====="
+            echo "===== Running ${script#tests/agent/scripts/} ====="
             if ./embedded_linux_audit --script "$script"; then
               script_rc=0
             else
@@ -79,7 +79,7 @@ jobs:
               echo "error: script parser/usage failure for $script"
               rc=1
             fi
-          done
+          done < <(find tests/agent/scripts -type f -name '*.ela' | sort)
           exit "$rc"
 
   qemu-tests:

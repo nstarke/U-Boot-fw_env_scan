@@ -1,4 +1,4 @@
-const { isSafeSinglePathSegment } = require('./shared');
+const { isSafeRelativePath, isSafeSinglePathSegment } = require('./shared');
 
 module.exports = function registerTestsRoute(app, deps) {
   const { testsDir, fsp, isWithinRoot, verboseRequestLog, verboseResponseLog } = deps;
@@ -22,9 +22,8 @@ module.exports = function registerTestsRoute(app, deps) {
     return dirs;
   }
 
-  app.get('/tests/agent/:type/:scriptName', async (req, res) => {
+  async function sendAgentTest(req, res, type, requestedPath) {
     verboseRequestLog(req);
-    const { type, scriptName: requestedPath } = req.params;
     const expectedSuffix = type === 'shell' ? '.sh' : '.ela';
 
     if (!validAgentTestTypes.has(type)) {
@@ -33,7 +32,11 @@ module.exports = function registerTestsRoute(app, deps) {
       return;
     }
 
-    if (!isSafeSinglePathSegment(requestedPath) || !requestedPath.endsWith(expectedSuffix)) {
+    const pathIsValid = type === 'shell'
+      ? isSafeSinglePathSegment(requestedPath)
+      : isSafeRelativePath(requestedPath);
+
+    if (!pathIsValid || !requestedPath.endsWith(expectedSuffix)) {
       res.status(400).type('text').send('invalid path\n');
       verboseResponseLog(req, 400, 13);
       return;
@@ -58,6 +61,15 @@ module.exports = function registerTestsRoute(app, deps) {
 
     res.status(404).type('text').send('not found\n');
     verboseResponseLog(req, 404, 10);
+  }
+
+  app.get('/tests/agent/:type/:scriptName', async (req, res) => {
+    await sendAgentTest(req, res, req.params.type, req.params.scriptName);
+  });
+
+  app.get(/^\/tests\/agent\/([^/]+)\/(.+)$/, async (req, res) => {
+    const [type, scriptPath] = req.params;
+    await sendAgentTest(req, res, type, scriptPath);
   });
 
   app.get('/tests/*', (req, res) => {
