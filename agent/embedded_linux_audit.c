@@ -333,6 +333,13 @@ static int interactive_set_command(int argc, char **argv)
 	}
 
 	if (!strcmp(argv[1], "ELA_OUTPUT_TCP")) {
+		if (!fw_audit_is_valid_tcp_output_target(argv[2])) {
+			fprintf(stderr,
+				"Invalid ELA_OUTPUT_TCP target (expected IPv4:port): %s\n",
+				argv[2]);
+			return 2;
+		}
+
 		if (setenv("ELA_OUTPUT_TCP", argv[2], 1) != 0) {
 			fprintf(stderr, "Failed to set ELA_OUTPUT_TCP\n");
 			return 2;
@@ -1631,6 +1638,14 @@ static int embedded_linux_audit_dispatch(int argc, char **argv)
 
 	if (output_http && output_https) {
 		fprintf(stderr, "Use only one of --output-http or --output-https\n\n");
+		usage(argv[0]);
+		return 2;
+	}
+
+	if (output_tcp && *output_tcp && !fw_audit_is_valid_tcp_output_target(output_tcp)) {
+		fprintf(stderr,
+			"Invalid --output-tcp target (expected IPv4:port): %s\n\n",
+			output_tcp);
 		usage(argv[0]);
 		return 2;
 	}

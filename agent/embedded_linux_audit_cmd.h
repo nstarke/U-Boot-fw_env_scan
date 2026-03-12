@@ -48,6 +48,7 @@ int uboot_parse_u64(const char *s, uint64_t *out);
 uint32_t uboot_read_be32(const uint8_t *p);
 const char *fw_audit_detect_isa(void);
 bool fw_audit_isa_supported_for_efi_bios(const char *isa);
+bool fw_audit_is_valid_tcp_output_target(const char *spec);
 int uboot_connect_tcp_ipv4(const char *spec);
 int uboot_send_all(int sock, const uint8_t *buf, size_t len);
 char *uboot_http_uri_normalize_default_port(const char *uri, uint16_t default_port);

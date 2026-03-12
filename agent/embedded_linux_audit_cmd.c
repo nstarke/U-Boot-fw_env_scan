@@ -1264,6 +1264,32 @@ int uboot_connect_tcp_ipv4(const char *spec)
 	return sock;
 }
 
+bool fw_audit_is_valid_tcp_output_target(const char *spec)
+{
+	char host[64];
+	char *colon;
+	char *end;
+	unsigned long port_ul;
+	struct in_addr addr;
+
+	if (!spec || !*spec)
+		return false;
+
+	strncpy(host, spec, sizeof(host) - 1);
+	host[sizeof(host) - 1] = '\0';
+	colon = strrchr(host, ':');
+	if (!colon || colon == host || *(colon + 1) == '\0')
+		return false;
+
+	*colon = '\0';
+	errno = 0;
+	port_ul = strtoul(colon + 1, &end, 10);
+	if (errno || *end || port_ul == 0 || port_ul > 65535)
+		return false;
+
+	return inet_pton(AF_INET, host, &addr) == 1;
+}
+
 int uboot_send_all(int sock, const uint8_t *buf, size_t len)
 {
 	while (len) {
