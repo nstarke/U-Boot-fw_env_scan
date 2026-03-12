@@ -140,6 +140,8 @@ jobs:
           done
 
       - name: Run qemu ISA tests
+        env:
+          ELA_QEMU_RUN_AS_ROOT: 1
         run: |
           set -euo pipefail
           bash tests/agent/qemu/test_all.sh

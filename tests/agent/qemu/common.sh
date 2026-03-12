@@ -13,6 +13,29 @@ TEST_SCRIPTS_DIR="$REPO_ROOT/tests/agent/scripts"
 RELEASE_BUILD_SCRIPT="$REPO_ROOT/tests/compile_release_binaries_locally.sh"
 SUPPORTED_ISAS="arm32-le arm32-be aarch64-le aarch64-be mips-le mips-be mips64-le mips64-be powerpc-le powerpc-be x86 x86_64 riscv32 riscv64"
 
+should_run_qemu_as_root() {
+    if [ "$(id -u)" -eq 0 ]; then
+        return 0
+    fi
+
+    case "${ELA_QEMU_RUN_AS_ROOT:-${GITHUB_ACTIONS:-}}" in
+        1|true|TRUE|yes|YES)
+            sudo -n true >/dev/null 2>&1
+            return "$?"
+            ;;
+    esac
+
+    return 1
+}
+
+run_host_command() {
+    if should_run_qemu_as_root; then
+        sudo -n "$@"
+    else
+        "$@"
+    fi
+}
+
 scrub_sensitive_stream() {
     while IFS= read -r line || [ -n "$line" ]; do
         lower_line="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
@@ -197,7 +220,7 @@ run_qemu_script_in_chroot() {
     script_path="$4"
 
     if [ "$qemu_mode" = "static" ]; then
-        bwrap \
+        run_host_command bwrap \
             --bind "$rootfs_dir" / \
             --proc /proc \
             --dev /dev \
@@ -209,7 +232,7 @@ run_qemu_script_in_chroot() {
             --chdir / \
             "/usr/bin/$qemu_runner" /bin/embedded_linux_audit --script "$script_path"
     else
-        bwrap \
+        run_host_command bwrap \
             --bind "$rootfs_dir" / \
             --proc /proc \
             --dev /dev \
@@ -251,11 +274,21 @@ run_qemu_script_direct() {
     script_path="$4"
 
     if [ "$qemu_mode" = "static" ]; then
-        HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
-            "$qemu_runner" "$binary_path" --script "$script_path"
+        if should_run_qemu_as_root; then
+            sudo -n env HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+                "$qemu_runner" "$binary_path" --script "$script_path"
+        else
+            HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+                "$qemu_runner" "$binary_path" --script "$script_path"
+        fi
     else
-        HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
-            "$binary_path" --script "$script_path"
+        if should_run_qemu_as_root; then
+            sudo -n env HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+                "$binary_path" --script "$script_path"
+        else
+            HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+                "$binary_path" --script "$script_path"
+        fi
     fi
 }
 
