@@ -75,11 +75,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install autotools for wolfSSL build
+      - name: Install build tooling for wolfSSL/libssh builds
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y autoconf automake libtool
+          sudo apt-get install -y autoconf automake cmake libtool
 
       - name: Debug selected targets
         run: |
