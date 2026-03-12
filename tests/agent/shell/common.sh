@@ -7,6 +7,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # shellcheck source=tests/system_package_helpers.sh
 . "$REPO_ROOT/tests/system_package_helpers.sh"
+# shellcheck source=tests/common_redaction.sh
+. "$REPO_ROOT/tests/common_redaction.sh"
 
 PASS_COUNT=0
 FAIL_COUNT=0
@@ -138,25 +140,6 @@ append_line() {
 $line
 EOF_APPEND_LINE
     fi
-}
-
-scrub_sensitive_stream() {
-    while IFS= read -r line || [ -n "$line" ]; do
-        lower_line="$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]')"
-        case "$lower_line" in
-            *efi-var*|*efi_vars*|*efivars*)
-                printf '[REDACTED EFI VARS]\n'
-                continue
-                ;;
-        esac
-
-        printf '%s\n' "$line" | sed -E \
-            -e 's/(data_hex=)[0-9A-Fa-f]+/\1<REDACTED>/g' \
-            -e 's/(([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])[[:space:]]*[:=][[:space:]]*)[^[:space:],;"}]+/\1<REDACTED>/g' \
-            -e 's/(([?&]([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]))=)[^&[:space:]]+/\1<REDACTED>/g' \
-            -e 's/"data_hex"[[:space:]]*:[[:space:]]*"[^"]*"/"data_hex":"<REDACTED>"/g' \
-            -e 's/"([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn])"[[:space:]]*:[[:space:]]*"[^"]*"/"\1":"<REDACTED>"/g'
-    done
 }
 
 print_file_head_scrubbed() {
