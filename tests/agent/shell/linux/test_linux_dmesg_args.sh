@@ -41,6 +41,13 @@ run_exact_case "linux dmesg --help" 0 "$BIN" linux dmesg --help
 run_accept_case "linux dmesg" "$BIN" linux dmesg
 run_accept_case "linux dmesg default verbose" "$BIN" linux dmesg
 run_accept_case "linux dmesg global --quiet" "$BIN" --quiet linux dmesg
+run_accept_case "linux dmesg --head 5" "$BIN" linux dmesg --head 5
+run_accept_case "linux dmesg --tail 5" "$BIN" linux dmesg --tail 5
+run_exact_case "linux dmesg invalid --head zero" 2 "$BIN" linux dmesg --head 0
+run_exact_case "linux dmesg invalid --head negative" 2 "$BIN" linux dmesg --head -1
+run_exact_case "linux dmesg invalid --tail zero" 2 "$BIN" linux dmesg --tail 0
+run_exact_case "linux dmesg invalid --tail negative" 2 "$BIN" linux dmesg --tail -1
+run_exact_case "linux dmesg rejects both --head and --tail" 2 "$BIN" linux dmesg --head 5 --tail 5
 run_exact_case "linux dmesg extra positional arg" 2 "$BIN" linux dmesg extra
 run_exact_case "linux dmesg invalid global --output-tcp" 2 "$BIN" --output-tcp invalid-target linux dmesg
 run_exact_case "linux dmesg global --output-tcp + --help" 0 "$BIN" --output-tcp 127.0.0.1:9 linux dmesg --help
@@ -80,5 +87,18 @@ else
     FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
 fi
 rm -f "$json_log"
+
+head_tail_log="$(mktemp /tmp/test_dmesg_head_tail_validation.XXXXXX)"
+run_with_output_override "$BIN" linux dmesg --head 3 --tail 3 >"$head_tail_log" 2>&1
+rc=$?
+if [ "$rc" -eq 2 ] && grep -q "Use only one of --head or --tail" "$head_tail_log"; then
+    echo "[PASS] linux dmesg validates mutually exclusive --head/--tail"
+    PASS_COUNT="$(expr "$PASS_COUNT" + 1)"
+else
+    echo "[FAIL] linux dmesg validates mutually exclusive --head/--tail (rc=$rc)"
+    print_file_head_scrubbed "$head_tail_log" 80
+    FAIL_COUNT="$(expr "$FAIL_COUNT" + 1)"
+fi
+rm -f "$head_tail_log"
 
 finish_tests

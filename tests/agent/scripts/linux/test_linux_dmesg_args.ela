@@ -3,5 +3,8 @@ linux dmesg --help
 ela linux dmesg --help
 embedded_linux_audit linux dmesg --help
 linux dmesg --help
+linux dmesg --head 5
+linux dmesg --tail 5
+linux dmesg --head 5 --tail 5
 ela --quiet linux dmesg --help
 embedded_linux_audit --output-format json linux dmesg --help

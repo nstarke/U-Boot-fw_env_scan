@@ -21,6 +21,30 @@ static char *g_output_http_buf = NULL;
 static size_t g_output_http_len;
 static size_t g_output_http_cap;
 
+struct line_buffer {
+	char *text;
+	size_t len;
+};
+
+static int parse_positive_line_count(const char *spec, size_t *count_out)
+{
+	char *end = NULL;
+	unsigned long value;
+
+	if (!spec || !*spec || !count_out)
+		return -1;
+	if (spec[0] == '-')
+		return -1;
+
+	errno = 0;
+	value = strtoul(spec, &end, 10);
+	if (errno != 0 || !end || *end != '\0' || value == 0 || (unsigned long)(size_t)value != value)
+		return -1;
+
+	*count_out = (size_t)value;
+	return 0;
+}
+
 static void send_to_output_socket(const char *buf, size_t len)
 {
 	while (g_output_sock >= 0 && len) {
@@ -160,9 +184,24 @@ static int flush_output_http_buffer(void)
 	return 0;
 }
 
+static void free_tail_lines(struct line_buffer *lines, size_t count)
+{
+	size_t i;
+
+	if (!lines)
+		return;
+
+	for (i = 0; i < count; i++)
+		free(lines[i].text);
+	free(lines);
+}
+
 static void usage(const char *prog)
 {
 	err_printf("Usage: %s\n"
+		   "  [--head <positive-lines> | --tail <positive-lines>]\n"
+		   "  --head N emits only the first N dmesg lines\n"
+		   "  --tail N emits only the last N dmesg lines\n"
 		   "  Remote output is configured via global --output-tcp or --output-http\n",
 		prog);
 }
@@ -176,6 +215,11 @@ int linux_dmesg_scan_main(int argc, char **argv)
 	const char *parsed_output_https = NULL;
 	FILE *fp = NULL;
 	char line[4096];
+	struct line_buffer *tail_lines = NULL;
+	size_t tail_count = 0;
+	size_t tail_seen = 0;
+	size_t head_count = 0;
+	size_t head_seen = 0;
 	int ret = 0;
 	int opt;
 
@@ -189,18 +233,37 @@ int linux_dmesg_scan_main(int argc, char **argv)
 
 	static const struct option long_opts[] = {
 		{ "help", no_argument, NULL, 'h' },
+		{ "head", required_argument, NULL, 'H' },
+		{ "tail", required_argument, NULL, 'T' },
 		{ 0, 0, 0, 0 }
 	};
 
-	while ((opt = getopt_long(argc, argv, "h", long_opts, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "hH:T:", long_opts, NULL)) != -1) {
 		switch (opt) {
 		case 'h':
 			usage(argv[0]);
 			return 0;
+		case 'H':
+			if (parse_positive_line_count(optarg, &head_count) != 0) {
+				err_printf("Invalid --head value (expected positive integer): %s\n", optarg);
+				return 2;
+			}
+			break;
+		case 'T':
+			if (parse_positive_line_count(optarg, &tail_count) != 0) {
+				err_printf("Invalid --tail value (expected positive integer): %s\n", optarg);
+				return 2;
+			}
+			break;
 		default:
 			usage(argv[0]);
 			return 2;
 		}
+	}
+
+	if (head_count && tail_count) {
+		err_printf("Use only one of --head or --tail\n");
+		return 2;
 	}
 
 	if (optind < argc) {
@@ -247,6 +310,15 @@ int linux_dmesg_scan_main(int argc, char **argv)
 	if (g_verbose)
 		err_printf("Collecting dmesg output\n");
 
+	if (tail_count) {
+		tail_lines = calloc(tail_count, sizeof(*tail_lines));
+		if (!tail_lines) {
+			err_printf("Out of memory while preparing tail buffer\n");
+			ret = 1;
+			goto out;
+		}
+	}
+
 	fp = popen("dmesg", "r");
 	if (!fp) {
 		err_printf("Failed to execute dmesg: %s\n", strerror(errno));
@@ -254,12 +326,53 @@ int linux_dmesg_scan_main(int argc, char **argv)
 		goto out;
 	}
 
-	while (fgets(line, sizeof(line), fp))
+	while (fgets(line, sizeof(line), fp)) {
+		if (head_count) {
+			if (head_seen < head_count)
+				out_printf("%s", line);
+			head_seen++;
+			if (head_seen >= head_count)
+				break;
+			continue;
+		}
+
+		if (tail_count) {
+			size_t slot = tail_seen % tail_count;
+			char *copy = strdup(line);
+
+			if (!copy) {
+				err_printf("Out of memory while storing tail output\n");
+				ret = 1;
+				goto out;
+			}
+
+			free(tail_lines[slot].text);
+			tail_lines[slot].text = copy;
+			tail_lines[slot].len = strlen(copy);
+			tail_seen++;
+			continue;
+		}
+
 		out_printf("%s", line);
+	}
 
 	if (pclose(fp) != 0 && ret == 0)
 		ret = 1;
 	fp = NULL;
+
+	if (ret == 0 && tail_count) {
+		size_t start;
+		size_t emit_count;
+		size_t i;
+
+		emit_count = tail_seen < tail_count ? tail_seen : tail_count;
+		start = tail_seen < tail_count ? 0 : (tail_seen % tail_count);
+		for (i = 0; i < emit_count; i++) {
+			size_t slot = (start + i) % tail_count;
+			if (tail_lines[slot].text)
+				out_printf("%s", tail_lines[slot].text);
+		}
+	}
 
 out:
 	if (fp)
@@ -269,6 +382,7 @@ out:
 	if (flush_output_http_buffer() < 0 && ret == 0)
 		ret = 1;
 	free(g_output_http_buf);
+	free_tail_lines(tail_lines, tail_count);
 	g_output_http_buf = NULL;
 	g_output_http_len = 0;
 	g_output_http_cap = 0;

@@ -4,6 +4,8 @@ Runs `dmesg` and emits kernel ring buffer output.
 
 ## `dmesg` arguments
 
+- `--head <positive-lines>` — emit only the first N lines of `dmesg` output
+- `--tail <positive-lines>` — emit only the last N lines of `dmesg` output
 - verbose logging is enabled by default; use top-level `--quiet` to disable command execution and remote HTTP(S) POST verbosity
 - `--output-tcp <IPv4:port>` — preferred as a top-level option; duplicate dmesg output to TCP destination
 - `--output-http <http://host:port/path>` — preferred as a top-level option; duplicate dmesg output to HTTP endpoint via POST
@@ -15,11 +17,14 @@ Runs `dmesg` and emits kernel ring buffer output.
 - `--output-format` does not change `dmesg` output behavior.
 - For this subcommand, HTTP/HTTPS remote output always uses `Content-Type: text/plain; charset=utf-8`.
 - If `--output-format` is explicitly set with `dmesg`, a warning is logged.
+- `--head` and `--tail` require a positive integer argument and cannot be used together.
 
 ## `dmesg` examples
 
 ```bash
 ./embedded_linux_audit linux dmesg
+./embedded_linux_audit linux dmesg --head 50
+./embedded_linux_audit linux dmesg --tail 100
 ./embedded_linux_audit --quiet linux dmesg
 ./embedded_linux_audit --output-tcp 192.168.1.50:5001 linux dmesg
 ./embedded_linux_audit --output-http http://192.168.1.50:5000/dmesg linux dmesg
