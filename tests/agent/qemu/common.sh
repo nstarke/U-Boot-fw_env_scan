@@ -13,6 +13,17 @@ TEST_SCRIPTS_DIR="$REPO_ROOT/tests/agent/scripts"
 RELEASE_BUILD_SCRIPT="$REPO_ROOT/tests/compile_release_binaries_locally.sh"
 SUPPORTED_ISAS="arm32-le arm32-be aarch64-le aarch64-be mips-le mips-be mips64-le mips64-be powerpc-le powerpc-be x86 x86_64 riscv32 riscv64"
 
+isa_has_compat_binary() {
+    case "$1" in
+        aarch64-le|aarch64-be|mips-le|mips-be|mips64-le|mips64-be|powerpc-le|powerpc-be|x86|x86_64|riscv32|riscv64)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
@@ -80,6 +91,11 @@ ensure_release_binaries() {
 
     for isa_name in $isa_list; do
         if [ ! -x "$RELEASE_BINARIES_DIR/$isa_name/embedded_linux_audit-$isa_name" ]; then
+            missing=1
+            break
+        fi
+
+        if isa_has_compat_binary "$isa_name" && [ ! -x "$RELEASE_BINARIES_DIR/$isa_name/embedded_linux_audit-$isa_name-compat" ]; then
             missing=1
             break
         fi
@@ -171,6 +187,48 @@ run_qemu_script_in_chroot() {
     fi
 }
 
+run_qemu_binary_tests() {
+    isa="$1"
+    binary_path="$2"
+    binary_label="$3"
+    qemu_mode="$4"
+    qemu_runner="$5"
+    shift 5
+
+    rootfs_dir="$(mktemp -d /tmp/ela-qemu-rootfs-${isa}.XXXXXX)"
+    rc=0
+
+    cleanup_qemu_binary_wrapper() {
+        rm -rf "$rootfs_dir"
+    }
+
+    trap cleanup_qemu_binary_wrapper EXIT INT TERM HUP
+
+    if [ "$qemu_mode" = "static" ]; then
+        create_chroot_tree "$rootfs_dir" "$isa" "$binary_path" "$qemu_runner"
+    else
+        create_chroot_tree "$rootfs_dir" "$isa" "$binary_path"
+    fi
+
+    echo "Running agent script coverage for ISA '$isa' ($binary_label) via $qemu_mode:$qemu_runner"
+    echo "Release binary: $binary_path"
+    echo "Chroot rootfs: $rootfs_dir"
+
+    for script_file in "$rootfs_dir"/tests/agent/scripts/*.ela; do
+        script_path="/tests/agent/scripts/$(basename "$script_file")"
+        echo
+        echo "===== Running $(basename "$script_file") ====="
+        if ! run_qemu_script_in_chroot "$qemu_mode" "$(basename "$qemu_runner")" "$rootfs_dir" "$script_path" "$@"; then
+            rc=1
+        fi
+    done
+
+    cleanup_qemu_binary_wrapper
+    trap - EXIT INT TERM HUP
+
+    return "$rc"
+}
+
 run_qemu_isa_tests() {
     isa="$1"
     qemu_static_cmd="$2"
@@ -178,7 +236,7 @@ run_qemu_isa_tests() {
     shift 3
 
     binary_path="${BIN:-$RELEASE_BINARIES_DIR/$isa/embedded_linux_audit-$isa}"
-    rootfs_dir="$(mktemp -d /tmp/ela-qemu-rootfs-${isa}.XXXXXX)"
+    compat_binary_path="$RELEASE_BINARIES_DIR/$isa/embedded_linux_audit-$isa-compat"
     rc=0
     qemu_resolution=""
     qemu_mode=""
@@ -193,30 +251,15 @@ run_qemu_isa_tests() {
     qemu_mode="${qemu_resolution%%:*}"
     qemu_runner="${qemu_resolution#*:}"
 
-    cleanup_qemu_wrapper() {
-        rm -rf "$rootfs_dir"
-    }
-
-    trap cleanup_qemu_wrapper EXIT INT TERM HUP
-
-    if [ "$qemu_mode" = "static" ]; then
-        create_chroot_tree "$rootfs_dir" "$isa" "$binary_path" "$qemu_runner"
-    else
-        create_chroot_tree "$rootfs_dir" "$isa" "$binary_path"
+    if ! run_qemu_binary_tests "$isa" "$binary_path" "default" "$qemu_mode" "$qemu_runner" "$@"; then
+        rc=1
     fi
 
-    echo "Running agent script coverage for ISA '$isa' via $qemu_mode:$qemu_runner"
-    echo "Release binary: $binary_path"
-    echo "Chroot rootfs: $rootfs_dir"
-
-    for script_file in "$rootfs_dir"/tests/agent/scripts/*.ela; do
-        script_path="/tests/agent/scripts/$(basename "$script_file")"
-        echo
-        echo "===== Running $(basename "$script_file") ====="
-        if ! run_qemu_script_in_chroot "$qemu_mode" "$(basename "$qemu_runner")" "$rootfs_dir" "$script_path" "$@"; then
+    if [ -z "${BIN:-}" ] && [ -x "$compat_binary_path" ]; then
+        if ! run_qemu_binary_tests "$isa" "$compat_binary_path" "compat" "$qemu_mode" "$qemu_runner" "$@"; then
             rc=1
         fi
-    done
+    fi
 
     return "$rc"
 }
