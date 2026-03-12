@@ -112,6 +112,33 @@ jobs:
             qemu-user-static \
             xz-utils
 
+      - name: Download cross-build artifacts from triggering workflow
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: ela-*
+          path: downloaded-release-binaries
+
+      - name: Stage downloaded release binaries for qemu tests
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          set -euo pipefail
+          rm -rf api/data/release_binaries
+          mkdir -p api/data/release_binaries
+
+          find downloaded-release-binaries -mindepth 1 -maxdepth 1 -type d | while IFS= read -r artifact_dir; do
+            isa="${artifact_dir##*/}"
+            isa="${isa#ela-}"
+            dest_dir="api/data/release_binaries/${isa}"
+            mkdir -p "$dest_dir"
+
+            find "$artifact_dir" -maxdepth 1 -type f -name 'ela-*' | while IFS= read -r binary; do
+              install -m 755 "$binary" "$dest_dir/$(basename "$binary")"
+            done
+          done
+
       - name: Run qemu ISA tests
         run: |
           set -euo pipefail
