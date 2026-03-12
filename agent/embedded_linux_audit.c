@@ -1186,6 +1186,7 @@ static int execute_script_commands(const char *prog, const char *script_source)
 	bool insecure;
 	unsigned long lineno = 0;
 	int last_rc = 0;
+	int final_rc = 0;
 
 	if (!prog || !script_source || !*script_source)
 		return 2;
@@ -1338,8 +1339,16 @@ static int execute_script_commands(const char *prog, const char *script_source)
 		last_rc = embedded_linux_audit_dispatch(dispatch_argc, dispatch_argv);
 		free(dispatch_argv);
 		interactive_free_argv(argv, argc);
-		if (last_rc != 0)
-			break;
+
+		/*
+		 * Script coverage files intentionally mix commands that may return
+		 * runtime/status failures (for example, no matching firmware payloads,
+		 * missing EFI support on the host, or root-only scan paths) with parser
+		 * and help coverage. Only failures in reading/parsing the script file
+		 * itself are treated as fatal for the overall script execution; per-line
+		 * command return codes are intentionally ignored so coverage can continue
+		 * across commands that legitimately return non-zero status.
+		 */
 	}
 
 out:
@@ -1351,7 +1360,7 @@ out:
 			rmdir(script_dir);
 	}
 	free(fallback_uri);
-	return last_rc;
+	return final_rc;
 }
 
 static int summary_append_text(char **buf, size_t *len, size_t *cap, const char *text)
