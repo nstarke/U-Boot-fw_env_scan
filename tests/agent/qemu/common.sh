@@ -223,39 +223,97 @@ run_qemu_script_in_chroot() {
     fi
 }
 
+bwrap_supports_qemu_chroot() {
+    probe_dir="$(mktemp -d /tmp/ela-bwrap-probe.XXXXXX)"
+
+    if bwrap \
+        --ro-bind / / \
+        --proc /proc \
+        --dev /dev \
+        --ro-bind /sys /sys \
+        --tmpfs /run \
+        --setenv HOME /root \
+        --setenv TMPDIR /tmp \
+        --chdir / \
+        /bin/sh -c 'mkdir -p "$1"' /bin/sh "$probe_dir" >/dev/null 2>&1; then
+        rm -rf "$probe_dir"
+        return 0
+    fi
+
+    rm -rf "$probe_dir"
+    return 1
+}
+
+run_qemu_script_direct() {
+    qemu_mode="$1"
+    qemu_runner="$2"
+    binary_path="$3"
+    script_path="$4"
+
+    if [ "$qemu_mode" = "static" ]; then
+        HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+            "$qemu_runner" "$binary_path" --script "$script_path"
+    else
+        HOME=/tmp TMPDIR=/tmp FW_AUDIT_TEST_ISA="${FW_AUDIT_TEST_ISA:-}" \
+            "$binary_path" --script "$script_path"
+    fi
+}
+
 run_qemu_binary_tests() {
     isa="$1"
     binary_path="$2"
     binary_label="$3"
     qemu_mode="$4"
     qemu_runner="$5"
-    shift 5
+    use_bwrap="$6"
 
-    rootfs_dir="$(mktemp -d /tmp/ela-qemu-rootfs-${isa}.XXXXXX)"
     rc=0
 
     cleanup_qemu_binary_wrapper() {
-        rm -rf "$rootfs_dir"
+        if [ -n "${rootfs_dir:-}" ]; then
+            rm -rf "$rootfs_dir"
+        fi
     }
 
     trap cleanup_qemu_binary_wrapper EXIT INT TERM HUP
 
-    if [ "$qemu_mode" = "static" ]; then
-        create_chroot_tree "$rootfs_dir" "$isa" "$binary_path" "$qemu_runner"
-    else
-        create_chroot_tree "$rootfs_dir" "$isa" "$binary_path"
+    if [ "$use_bwrap" -eq 1 ]; then
+        rootfs_dir="$(mktemp -d /tmp/ela-qemu-rootfs-${isa}.XXXXXX)"
+        if [ "$qemu_mode" = "static" ]; then
+            create_chroot_tree "$rootfs_dir" "$isa" "$binary_path" "$qemu_runner"
+        else
+            create_chroot_tree "$rootfs_dir" "$isa" "$binary_path"
+        fi
     fi
 
     echo "Running agent script coverage for ISA '$isa' ($binary_label) via $qemu_mode:$qemu_runner"
     echo "Release binary: $binary_path"
-    echo "Chroot rootfs: $rootfs_dir"
+    if [ "$use_bwrap" -eq 1 ]; then
+        echo "Chroot rootfs: $rootfs_dir"
+    else
+        echo "Host script execution mode enabled"
+    fi
 
-    find "$rootfs_dir/tests/agent/scripts" -type f -name '*.ela' | sort | while IFS= read -r script_file; do
-        script_path="/tests/agent/scripts/${script_file#"$rootfs_dir/tests/agent/scripts"/}"
+    if [ "$use_bwrap" -eq 1 ]; then
+        script_list_root="$rootfs_dir/tests/agent/scripts"
+    else
+        script_list_root="$TEST_SCRIPTS_DIR"
+    fi
+
+    find "$script_list_root" -type f -name '*.ela' | sort | while IFS= read -r script_file; do
         script_log="$(mktemp /tmp/ela-qemu-script-log.${isa}.XXXXXX)"
+        if [ "$use_bwrap" -eq 1 ]; then
+            script_path="/tests/agent/scripts/${script_file#"$rootfs_dir/tests/agent/scripts"/}"
+        else
+            script_path="$script_file"
+        fi
         echo
-        echo "===== Running ${script_path#/tests/agent/scripts/} ====="
-        run_qemu_script_in_chroot "$qemu_mode" "$(basename "$qemu_runner")" "$rootfs_dir" "$script_path" "$@" >"$script_log" 2>&1
+        echo "===== Running ${script_path#"$TEST_SCRIPTS_DIR"/} ====="
+        if [ "$use_bwrap" -eq 1 ]; then
+            run_qemu_script_in_chroot "$qemu_mode" "$(basename "$qemu_runner")" "$rootfs_dir" "$script_path" >"$script_log" 2>&1
+        else
+            run_qemu_script_direct "$qemu_mode" "$qemu_runner" "$binary_path" "$script_path" >"$script_log" 2>&1
+        fi
         script_rc=$?
         print_file_scrubbed "$script_log"
         rm -f "$script_log"
@@ -279,12 +337,9 @@ run_qemu_isa_tests() {
     binary_path="${BIN:-$RELEASE_BINARIES_DIR/$isa/ela-$isa}"
     compat_binary_path="$RELEASE_BINARIES_DIR/$isa/ela-$isa-compat"
     rc=0
-    qemu_resolution=""
-    qemu_mode=""
-    qemu_runner=""
+    use_bwrap=0
 
     ensure_release_binaries "$isa"
-    require_command bwrap
     require_file "$binary_path"
     require_file "$TEST_SCRIPTS_DIR/linux/test_linux_dmesg_args.ela"
 
@@ -292,12 +347,21 @@ run_qemu_isa_tests() {
     qemu_mode="${qemu_resolution%%:*}"
     qemu_runner="${qemu_resolution#*:}"
 
-    if ! run_qemu_binary_tests "$isa" "$binary_path" "default" "$qemu_mode" "$qemu_runner" "$@"; then
+    FW_AUDIT_TEST_ISA="$isa"
+    export FW_AUDIT_TEST_ISA
+
+    if command_exists bwrap && bwrap_supports_qemu_chroot; then
+        use_bwrap=1
+    else
+        echo "warning: bwrap sandbox unavailable on this host; running qemu tests without chroot isolation" >&2
+    fi
+
+    if ! run_qemu_binary_tests "$isa" "$binary_path" "default" "$qemu_mode" "$qemu_runner" "$use_bwrap"; then
         rc=1
     fi
 
     if [ -z "${BIN:-}" ] && [ -x "$compat_binary_path" ]; then
-        if ! run_qemu_binary_tests "$isa" "$compat_binary_path" "compat" "$qemu_mode" "$qemu_runner" "$@"; then
+        if ! run_qemu_binary_tests "$isa" "$compat_binary_path" "compat" "$qemu_mode" "$qemu_runner" "$use_bwrap"; then
             rc=1
         fi
     fi
