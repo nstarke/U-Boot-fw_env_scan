@@ -13,7 +13,7 @@ TMPDIR_CLEAN="$(mktemp -d /tmp/fw_api_clean.XXXXXX)"
 trap 'rm -rf "$TMPDIR_CLEAN"' EXIT INT TERM
 
 mkdir -p "$TMPDIR_CLEAN/data/release_binaries" "$TMPDIR_CLEAN/data/old_run/subdir"
-printf 'cached-release\n' > "$TMPDIR_CLEAN/data/release_binaries/embedded_linux_audit-arm64"
+printf 'cached-release\n' > "$TMPDIR_CLEAN/data/release_binaries/ela-arm64"
 printf 'stale\n' > "$TMPDIR_CLEAN/data/old_run/subdir/file.txt"
 printf 'root-stale\n' > "$TMPDIR_CLEAN/data/stale.txt"
 
@@ -30,7 +30,7 @@ removeDirectoryContents(path.join(tmpDir, 'data'), new Set(['release_binaries'])
   });
 NODE
 
-if [ -f "$TMPDIR_CLEAN/data/release_binaries/embedded_linux_audit-arm64" ]; then
+if [ -f "$TMPDIR_CLEAN/data/release_binaries/ela-arm64" ]; then
     pass_case "--clean preserves release_binaries contents"
 else
     fail_case "--clean preserves release_binaries contents" sh -c "find '$TMPDIR_CLEAN/data' -maxdepth 3 -print"

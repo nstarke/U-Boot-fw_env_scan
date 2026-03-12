@@ -183,73 +183,73 @@ set_isa_config() {
             zig_targets="aarch64-linux-musl"
             cpu_compat="aarch64"
             compat_targets="aarch64-linux-musl"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         aarch64-be)
             zig_targets="aarch64_be-linux-musl"
             cpu_compat="aarch64_be"
             compat_targets="aarch64_be-linux-musl"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         mips-le)
             zig_targets="mipsel-linux-musleabi,mipsel-linux-musleabihf"
             cpu_compat="mipsel"
             compat_targets="mipsel-linux-musleabi"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         mips-be)
             zig_targets="mips-linux-musleabi,mips-linux-musleabihf"
             cpu_compat="mips"
             compat_targets="mips-linux-musleabi"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         mips64-le)
             zig_targets="mips64el-linux-muslabi64,mips64el-linux-muslabin32,mips64el-linux-gnuabi64,mips64el-linux-gnuabin32"
             cpu_compat="mips64el"
             compat_targets="mips64el-linux-muslabi64,mips64el-linux-gnuabi64"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         mips64-be)
             zig_targets="mips64-linux-muslabi64,mips64-linux-muslabin32,mips64-linux-gnuabi64,mips64-linux-gnuabin32"
             cpu_compat="mips64"
             compat_targets="mips64-linux-muslabi64,mips64-linux-gnuabi64"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         powerpc-le)
             zig_targets="powerpc64le-linux-musl,powerpc64le-linux-gnu"
             cpu_compat="powerpc64le"
             compat_targets="powerpc64le-linux-musl,powerpc64le-linux-gnu"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         powerpc-be)
             zig_targets="powerpc-linux-musleabi,powerpc-linux-musleabihf,powerpc-linux-gnueabi,powerpc-linux-gnueabihf"
             cpu_compat="powerpc"
             compat_targets="powerpc-linux-musleabi,powerpc-linux-gnueabi"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         x86)
             zig_targets="x86-linux-musl"
             cpu_compat="x86"
             compat_targets="x86-linux-musl"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         x86_64)
             zig_targets="x86_64-linux-musl"
             cpu_compat="x86_64"
             compat_targets="x86_64-linux-musl"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         riscv32)
             zig_targets="riscv32-linux-musl,riscv32-linux-gnu"
             cpu_compat="riscv32"
             compat_targets="riscv32-linux-musl,riscv32-linux-gnu"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         riscv64)
             zig_targets="riscv64-linux-musl,riscv64-linux-gnu"
             cpu_compat="riscv64"
             compat_targets="riscv64-linux-musl,riscv64-linux-gnu"
-            compat_name="embedded_linux_audit-$isa-compat"
+            compat_name="ela-$isa-compat"
             ;;
         *)
             echo "error: unsupported isa: $isa" >&2
@@ -310,7 +310,7 @@ build_with_targets() {
 build_release_binary() {
     isa="$1"
     dest_dir="$DEST_RELEASE_DIR/$isa"
-    dest="$dest_dir/embedded_linux_audit-$isa"
+    dest="$dest_dir/ela-$isa"
 
     set_isa_config "$isa"
 

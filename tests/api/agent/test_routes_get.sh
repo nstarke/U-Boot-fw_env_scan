@@ -14,7 +14,7 @@ print_section "api GET route coverage"
 
 SCRIPT_BODY="$(printf '#!/bin/sh\necho test-one')"
 
-run_curl_body_contains_case "GET / includes release binaries" GET "$TEST_WEB_BASE_URL/" 200 "embedded_linux_audit-arm64"
+run_curl_body_contains_case "GET / includes release binaries" GET "$TEST_WEB_BASE_URL/" 200 "ela-arm64"
 run_curl_body_contains_case "GET / includes agent shell test scripts" GET "$TEST_WEB_BASE_URL/" 200 "tests/agent/shell/test_one.sh"
 run_curl_body_contains_case "GET / includes agent argument scripts" GET "$TEST_WEB_BASE_URL/" 200 "tests/agent/scripts/test_linux_dmesg_args.ela"
 run_curl_body_contains_case "GET / includes command scripts" GET "$TEST_WEB_BASE_URL/" 200 "scripts/sample-script.txt"
@@ -38,7 +38,7 @@ run_curl_case "GET /isa/arm64 serves matching asset" GET "$TEST_WEB_BASE_URL/isa
 run_curl_case "GET /isa/..%2Fescape rejects invalid segment" GET "$TEST_WEB_BASE_URL/isa/..%2Fescape" 400 "invalid path"
 run_curl_case "GET /isa/missing returns 404" GET "$TEST_WEB_BASE_URL/isa/missing" 404 "not found"
 
-run_curl_case "GET /embedded_linux_audit-arm64 serves asset" GET "$TEST_WEB_BASE_URL/embedded_linux_audit-arm64" 200 "asset-one"
+run_curl_case "GET /ela-arm64 serves asset" GET "$TEST_WEB_BASE_URL/ela-arm64" 200 "asset-one"
 run_curl_case "GET /scripts/sample-script.txt serves script" GET "$TEST_WEB_BASE_URL/scripts/sample-script.txt" 200 "linux execute-command \"echo scripted\"
 linux execute-command \"printf second\""
 run_curl_case "GET /scripts/..%2Fescape rejects invalid segment" GET "$TEST_WEB_BASE_URL/scripts/..%2Fescape" 400 "invalid path"

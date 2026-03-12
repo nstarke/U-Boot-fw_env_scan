@@ -20,7 +20,7 @@ This makes it useful for field diagnostics, incident response, and recovery vali
 
 ## Portable static GitHub release builds
 
-GitHub Releases are produced by a cross-build workflow (`.github/workflows/release-cross-static.yml`) that compiles **fully static** binaries across many architectures using **Zig + musl** targets. Release artifacts are uploaded as per-architecture `embedded_linux_audit-*` binaries.
+GitHub Releases are produced by a cross-build workflow (`.github/workflows/release-cross-static.yml`) that compiles **fully static** binaries across many architectures using **Zig + musl** targets. Release artifacts are uploaded as per-architecture `ela-*` binaries.
 
 Why this matters:
 

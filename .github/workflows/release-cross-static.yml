@@ -122,7 +122,7 @@ jobs:
                     CMAKE_C_COMPILER_ARG1=cc \
                     CMAKE_C_COMPILER_TARGET="${T}" \
                     CC="zig cc -target ${T}"; then
-              cp embedded_linux_audit "dist/${{ matrix.name }}/embedded_linux_audit-${{ matrix.name }}"
+              cp embedded_linux_audit "dist/${{ matrix.name }}/ela-${{ matrix.name }}"
               echo "Built default successfully with target: ${T}"
               BUILT=1
               break
@@ -162,7 +162,7 @@ jobs:
                     CMAKE_C_COMPILER_ARG1=cc \
                     CMAKE_C_COMPILER_TARGET="${T}" \
                     CC="zig cc -target ${T}"; then
-              cp embedded_linux_audit "dist/${{ matrix.name }}/embedded_linux_audit-${{ matrix.name }}-compat"
+              cp embedded_linux_audit "dist/${{ matrix.name }}/ela-${{ matrix.name }}-compat"
               echo "Built CPU_COMPAT successfully with target: ${T}"
               BUILT=1
               break
@@ -178,10 +178,10 @@ jobs:
       - name: Upload matrix artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fw-tools-${{ matrix.name }}
+          name: ela-${{ matrix.name }}
           path: |
-            dist/${{ matrix.name }}/embedded_linux_audit-${{ matrix.name }}
-            dist/${{ matrix.name }}/embedded_linux_audit-${{ matrix.name }}-compat
+            dist/${{ matrix.name }}/ela-${{ matrix.name }}
+            dist/${{ matrix.name }}/ela-${{ matrix.name }}-compat
           if-no-files-found: ignore
 
   publish-release-assets:
@@ -199,4 +199,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/**/embedded_linux_audit-*
+            release-assets/**/ela-*

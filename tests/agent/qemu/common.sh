@@ -90,12 +90,12 @@ ensure_release_binaries() {
     fi
 
     for isa_name in $isa_list; do
-        if [ ! -x "$RELEASE_BINARIES_DIR/$isa_name/embedded_linux_audit-$isa_name" ]; then
+        if [ ! -x "$RELEASE_BINARIES_DIR/$isa_name/ela-$isa_name" ]; then
             missing=1
             break
         fi
 
-        if isa_has_compat_binary "$isa_name" && [ ! -x "$RELEASE_BINARIES_DIR/$isa_name/embedded_linux_audit-$isa_name-compat" ]; then
+        if isa_has_compat_binary "$isa_name" && [ ! -x "$RELEASE_BINARIES_DIR/$isa_name/ela-$isa_name-compat" ]; then
             missing=1
             break
         fi
@@ -241,8 +241,8 @@ run_qemu_isa_tests() {
     qemu_binfmt_cmd="$3"
     shift 3
 
-    binary_path="${BIN:-$RELEASE_BINARIES_DIR/$isa/embedded_linux_audit-$isa}"
-    compat_binary_path="$RELEASE_BINARIES_DIR/$isa/embedded_linux_audit-$isa-compat"
+    binary_path="${BIN:-$RELEASE_BINARIES_DIR/$isa/ela-$isa}"
+    compat_binary_path="$RELEASE_BINARIES_DIR/$isa/ela-$isa-compat"
     rc=0
     qemu_resolution=""
     qemu_mode=""

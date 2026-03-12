@@ -338,7 +338,7 @@ else
         [ -n "$candidate_path_rel" ] || continue
 
         candidate_url="$(resolve_url "$BASE_URL" "$candidate_path_rel")"
-        candidate_file="$TEMP_BINARY_DIRECTORY/embedded_linux_audit-$candidate_isa"
+        candidate_file="$TEMP_BINARY_DIRECTORY/ela-$candidate_isa"
 
         echo "downloading $candidate_url -> $candidate_file"
         fetch_to_file "$candidate_url" "$candidate_file"
@@ -346,7 +346,7 @@ else
     done
 
     for candidate_isa in $(list_valid_isas | delete_cr_stream | sed 's/[[:space:]]*$//' | sed '/^$/d'); do
-        candidate_file="$TEMP_BINARY_DIRECTORY/embedded_linux_audit-$candidate_isa"
+        candidate_file="$TEMP_BINARY_DIRECTORY/ela-$candidate_isa"
         [ -f "$candidate_file" ] || continue
 
         echo "probing ISA candidate: $candidate_isa"

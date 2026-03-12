@@ -5,7 +5,9 @@ function listBinaryEntries(assetsDir, fsp, releaseStateFile) {
       && entry.name !== '.release_state.json'
       && !entry.name.startsWith('.release_state'))
     .map((entry) => {
-      const isa = entry.name.startsWith('embedded_linux_audit-')
+      const isa = entry.name.startsWith('ela-')
+        ? entry.name.slice('ela-'.length)
+        : entry.name.startsWith('embedded_linux_audit-')
         ? entry.name.slice('embedded_linux_audit-'.length)
         : entry.name;
       return {
