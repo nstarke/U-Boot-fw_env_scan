@@ -4,6 +4,41 @@ LDFLAGS ?=
 LDLIBS  ?=
 JOBS    ?= 4
 AUTOCONF ?= autoconf
+TOOLS_CACHE_DIR ?= .cache/tools
+ZIG_VERSION ?= 0.14.0
+
+HOST_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+HOST_ARCH := $(shell uname -m)
+ZIG_IN_PATH := $(strip $(shell command -v zig 2>/dev/null))
+
+ifeq ($(HOST_OS),linux)
+ifeq ($(filter x86_64 amd64,$(HOST_ARCH)),)
+ifeq ($(filter aarch64 arm64,$(HOST_ARCH)),)
+ZIG_HOST_TRIPLE :=
+ZIG_DOWNLOAD_HOST :=
+else
+ZIG_HOST_TRIPLE := aarch64-linux
+ZIG_DOWNLOAD_HOST := linux-aarch64
+endif
+else
+ZIG_HOST_TRIPLE := x86_64-linux
+ZIG_DOWNLOAD_HOST := linux-x86_64
+endif
+else
+ZIG_HOST_TRIPLE :=
+ZIG_DOWNLOAD_HOST :=
+endif
+
+ZIG_CACHE_DIR := $(abspath $(TOOLS_CACHE_DIR))/zig/$(ZIG_VERSION)/$(ZIG_HOST_TRIPLE)
+ZIG_BIN := $(if $(ZIG_IN_PATH),$(ZIG_IN_PATH),$(ZIG_CACHE_DIR)/zig)
+NEEDS_ZIG := $(if $(findstring zig cc,$(CC)),1,$(if $(filter zig,$(notdir $(CMAKE_C_COMPILER))),1,))
+
+ifeq ($(NEEDS_ZIG),1)
+CC := $(patsubst zig %,$(ZIG_BIN) %,$(CC))
+ifeq ($(filter zig,$(notdir $(CMAKE_C_COMPILER))),zig)
+CMAKE_C_COMPILER := $(ZIG_BIN)
+endif
+endif
 
 COMPAT_CPU ?=
 COMPAT_CFLAGS :=
@@ -346,7 +381,51 @@ ifneq ($(filter $(COMPAT_CPU),arm32 armeb powerpc powerpchf),)
 SRC += compat/legacy_sync_builtins.c
 endif
 
-.PHONY: all env image static test clean check-autoconf
+.PHONY: all env image static test clean check-autoconf check-zig
+
+check-zig:
+	@if [ "$(NEEDS_ZIG)" != "1" ]; then \
+		exit 0; \
+	fi; \
+	if [ -x "$(ZIG_BIN)" ]; then \
+		exit 0; \
+	fi; \
+	if [ -z "$(ZIG_HOST_TRIPLE)" ] || [ -z "$(ZIG_DOWNLOAD_HOST)" ]; then \
+		echo "error: zig not found on PATH and automatic Zig download is unsupported on host $(HOST_OS)/$(HOST_ARCH)"; \
+		exit 1; \
+	fi; \
+	archive_name="zig-$(ZIG_DOWNLOAD_HOST)-$(ZIG_VERSION).tar.xz"; \
+	tmp_dir="$(abspath $(TOOLS_CACHE_DIR))/zig/tmp"; \
+	archive_path="$$tmp_dir/$$archive_name"; \
+	extract_dir="$$tmp_dir/extract-$(ZIG_HOST_TRIPLE)-$(ZIG_VERSION)"; \
+	extracted_root="$$extract_dir/zig-$(ZIG_DOWNLOAD_HOST)-$(ZIG_VERSION)"; \
+	archive_url="https://ziglang.org/download/$(ZIG_VERSION)/$$archive_name"; \
+	echo "zig not found on PATH; downloading Zig $(ZIG_VERSION) for $(ZIG_HOST_TRIPLE)"; \
+	mkdir -p "$$tmp_dir"; \
+	rm -rf "$$extract_dir"; \
+	if command -v curl >/dev/null 2>&1; then \
+		curl -fL "$$archive_url" -o "$$archive_path"; \
+	elif command -v wget >/dev/null 2>&1; then \
+		wget -O "$$archive_path" "$$archive_url"; \
+	else \
+		echo "error: need curl or wget to download $$archive_url"; \
+		exit 1; \
+	fi; \
+	if ! command -v tar >/dev/null 2>&1; then \
+		echo "error: tar is required to extract $$archive_name"; \
+		exit 1; \
+	fi; \
+	mkdir -p "$$extract_dir"; \
+	tar -xJf "$$archive_path" -C "$$extract_dir"; \
+	if [ ! -x "$$extracted_root/zig" ]; then \
+		echo "error: downloaded Zig archive did not contain expected binary: $$extracted_root/zig"; \
+		exit 1; \
+	fi; \
+	mkdir -p "$(dir $(ZIG_CACHE_DIR))"; \
+	rm -rf "$(ZIG_CACHE_DIR)"; \
+	mv "$$extracted_root" "$(ZIG_CACHE_DIR)"; \
+	rm -rf "$$extract_dir"; \
+	rm -f "$$archive_path"
 
 check-autoconf:
 	@command -v $(AUTOCONF) >/dev/null 2>&1 || { \
@@ -360,6 +439,8 @@ all: $(TARGET)
 env: $(TARGET)
 
 image: $(TARGET)
+
+$(TARGET): | check-zig
 
 $(JSONC_LIB):
 	cmake -S $(JSONC_DIR) -B $(JSONC_BUILD) $(JSONC_CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON -DBUILD_TESTING=OFF -DBUILD_APPS=OFF
@@ -455,6 +536,8 @@ ifeq ($(ELA_ENABLE_WOLFSSL),1)
 TARGET_DEPS += $(WOLFSSL_LIB)
 TARGET_LIBS += $(WOLFSSL_LIB)
 endif
+
+$(TARGET_DEPS): | check-zig
 
 $(TARGET): $(TARGET_DEPS)
 	$(CC) $(CFLAGS) -o $@ $(SRC) $(TARGET_LIBS) $(LDFLAGS) $(LDLIBS)
