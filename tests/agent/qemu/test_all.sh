@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -u
 
@@ -18,7 +18,6 @@ rc=0
 pass_count=0
 fail_count=0
 clean_release_binaries=0
-forwarded_args=""
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -30,7 +29,6 @@ while [ "$#" -gt 0 ]; do
             usage
             ;;
         *)
-            forwarded_args="$*"
             break
             ;;
     esac
@@ -65,14 +63,8 @@ do
     echo
     echo "===== Running $(basename "$test_script") ====="
     test_log="$(mktemp /tmp/ela-qemu-test-all.XXXXXX)"
-    if [ -n "$forwarded_args" ]; then
-        # shellcheck disable=SC2086
-        /bin/sh "$test_script" $forwarded_args >"$test_log" 2>&1
-    else
-        /bin/sh "$test_script" >"$test_log" 2>&1
-    fi
-    test_rc=$?
-    cat "$test_log"
+    /bin/sh "$test_script" "$@" 2>&1 | tee "$test_log"
+    test_rc=${PIPESTATUS[0]}
 
     test_passes="$(sed -n 's/^Passed: //p' "$test_log" | tail -n 1)"
     test_fails="$(sed -n 's/^Failed: //p' "$test_log" | tail -n 1)"
