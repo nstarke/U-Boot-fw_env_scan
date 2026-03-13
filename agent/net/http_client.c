@@ -250,7 +250,7 @@ static int read_http_status_and_headers(int sock, int *status_out)
 	return 0;
 }
 
-static int __attribute__((unused)) simple_http_post(const char *uri,
+static int simple_http_post(const char *uri,
 			    const uint8_t *data,
 			    size_t len,
 			    const char *content_type,
@@ -1550,6 +1550,21 @@ int uboot_http_post(const char *uri, const uint8_t *data, size_t len,
 	}
 	if (normalized_uri)
 		effective_uri = normalized_uri;
+
+	/*
+	 * For plain http://, use the lightweight socket-based POST to avoid
+	 * curl / OpenSSL initialisation on architectures where curl_global_init
+	 * is unreliable under QEMU user-mode emulation (e.g. arm32-be).
+	 */
+	if (!is_https) {
+		const char *ct = (content_type && *content_type)
+				  ? content_type
+				  : "text/plain; charset=utf-8";
+		int ret = simple_http_post(effective_uri, data, len, ct,
+					   verbose, errbuf, errbuf_len);
+		free(normalized_uri);
+		return ret;
+	}
 
 	fw_audit_force_conservative_powerpc_crypto_caps();
 
