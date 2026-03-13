@@ -554,7 +554,8 @@ $(WOLFSSL_LIB): check-autoconf
 	mkdir -p $(WOLFSSL_BUILD)
 	if [ ! -x "$(WOLFSSL_DIR)/configure" ] \
 		|| [ "$(WOLFSSL_DIR)/configure.ac" -nt "$(WOLFSSL_DIR)/configure" ] \
-		|| [ "$(WOLFSSL_DIR)/aclocal.m4" -nt "$(WOLFSSL_DIR)/configure" ]; then \
+		|| [ "$(WOLFSSL_DIR)/aclocal.m4" -nt "$(WOLFSSL_DIR)/configure" ] \
+		|| grep -qE '^[[:space:]]*(LT_PREREQ|LT_INIT)\(' "$(WOLFSSL_DIR)/configure"; then \
 		$(MAKE) check-autoreconf; \
 		cd $(WOLFSSL_DIR) && ./autogen.sh; \
 	fi
