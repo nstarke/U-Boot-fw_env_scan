@@ -61,22 +61,35 @@ for test_script in \
 do
     echo
     echo "===== Running $(basename "$test_script") ====="
+    test_log="$(mktemp /tmp/ela-shell-test-all.XXXXXX)"
     if [ -n "$TEST_OUTPUT_HTTP" ]; then
-        /bin/sh "$test_script" --output-http "$TEST_OUTPUT_HTTP"
+        /bin/sh "$test_script" --output-http "$TEST_OUTPUT_HTTP" >"$test_log" 2>&1
     else
-        /bin/sh "$test_script"
+        /bin/sh "$test_script" >"$test_log" 2>&1
+    fi
+    test_rc=$?
+    cat "$test_log"
+
+    test_passes="$(sed -n 's/^Passed: //p' "$test_log" | tail -n 1)"
+    test_fails="$(sed -n 's/^Failed: //p' "$test_log" | tail -n 1)"
+
+    if [ -n "$test_passes" ]; then
+        pass_count="$(expr "$pass_count" + "$test_passes")"
     fi
 
-    if [ "$?" -ne 0 ]; then
+    if [ -n "$test_fails" ]; then
+        fail_count="$(expr "$fail_count" + "$test_fails")"
+    fi
+
+    rm -f "$test_log"
+
+    if [ "$test_rc" -ne 0 ]; then
         rc=1
-        fail_count="$(expr "$fail_count" + 1)"
-    else
-        pass_count="$(expr "$pass_count" + 1)"
     fi
 done
 
 echo
-echo "Sub-tests passed: $pass_count"
-echo "Sub-tests failed: $fail_count"
+echo "Total test cases passed: $pass_count"
+echo "Total test cases failed: $fail_count"
 
 exit "$rc"
