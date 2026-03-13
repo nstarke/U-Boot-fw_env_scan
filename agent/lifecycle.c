@@ -32,9 +32,9 @@ static int build_lifecycle_payload(const char *output_format,
 
 	snprintf(rc_buf, sizeof(rc_buf), "%d", rc);
 	now = time(NULL);
-	if (localtime_r(&now, &tm_now) == NULL)
+	if (gmtime_r(&now, &tm_now) == NULL)
 		return -1;
-	if (strftime(ts_buf, sizeof(ts_buf), "%Y-%m-%dT%H:%M:%S%z", &tm_now) == 0)
+	if (strftime(ts_buf, sizeof(ts_buf), "%Y-%m-%dT%H:%M:%SZ", &tm_now) == 0)
 		return -1;
 
 	if (!strcmp(fmt, "json")) {
