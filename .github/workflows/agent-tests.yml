@@ -230,14 +230,26 @@ jobs:
               done
             done
           else
-            local_release_dir="$(find downloaded-release-binaries -type d -name release_binaries | head -n 1)"
-            if [ -z "$local_release_dir" ]; then
-              echo "error: unable to locate downloaded release_binaries directory" >&2
-              find downloaded-release-binaries -maxdepth 5 -print >&2 || true
-              exit 1
-            fi
+            if [ -d downloaded-release-binaries/release_binaries ]; then
+              cp -a downloaded-release-binaries/release_binaries/. api/data/release_binaries/
+            else
+              find downloaded-release-binaries -mindepth 1 -maxdepth 1 -type d | while IFS= read -r artifact_dir; do
+                isa="${artifact_dir##*/}"
+                dest_dir="api/data/release_binaries/${isa}"
+                mkdir -p "$dest_dir"
 
-            cp -a "$local_release_dir"/. api/data/release_binaries/
+                find "$artifact_dir" -type f \( -name 'ela-*' -o -name 'embedded_linux_audit-*' \) | while IFS= read -r binary; do
+                  binary_name="$(basename "$binary")"
+                  case "$binary_name" in
+                    embedded_linux_audit-*)
+                      binary_name="ela-${binary_name#embedded_linux_audit-}"
+                      ;;
+                  esac
+
+                  install -m 755 "$binary" "$dest_dir/$binary_name"
+                done
+              done
+            fi
           fi
 
       - name: Run qemu ISA tests
