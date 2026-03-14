@@ -1,0 +1,17 @@
+# Interactive/script coverage for tpm2
+tpm2 --help
+ela tpm2 --help
+embedded_linux_audit tpm2 list-commands
+tpm2 getcap --help # inline comment should be ignored
+embedded_linux_audit --output-format txt tpm2 list-commands
+embedded_linux_audit --output-format csv tpm2 list-commands
+embedded_linux_audit --output-format json tpm2 list-commands
+embedded_linux_audit --quiet tpm2 list-commands
+tpm2 pcrread sha256:0
+tpm2 getrandom
+tpm2 nvreadpublic
+tpm2 readpublic
+tpm2 quote
+tpm2 pcrextend
+embedded_linux_audit --output-format json tpm2 pcrread sha256:0
+embedded_linux_audit --output-format csv tpm2 getrandom

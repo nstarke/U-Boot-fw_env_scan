@@ -34,6 +34,7 @@ static const char *const interactive_top_level_commands[] = {
 	"linux",
 	"efi",
 	"bios",
+	"tpm2",
 	NULL,
 };
 
@@ -53,7 +54,6 @@ static const char *const interactive_group_linux[] = {
 	"list-symlinks",
 	"remote-copy",
 	"ssh",
-	"tpm2",
 	NULL,
 };
 
@@ -112,7 +112,7 @@ static void interactive_usage(const char *prog)
 	       "  linux list-symlinks\n"
 	       "  linux remote-copy\n"
 	       "  linux ssh\n"
-	       "  linux tpm2\n"
+	       "  tpm2\n"
 	       "  efi orom\n"
 	       "  efi dump-vars\n"
 	       "  bios orom\n"

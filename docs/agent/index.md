@@ -34,6 +34,10 @@ This section contains documentation for the `embedded_linux_audit` agent, organi
 - [`embedded_linux_audit linux list-symlinks`](linux/list-symlinks.md)
 - [`embedded_linux_audit linux remote-copy`](linux/remote-copy.md)
 
+### TPM2
+
+- [`embedded_linux_audit tpm2`](tpm2/index.md)
+
 ### EFI
 
 - [`embedded_linux_audit efi`](efi/index.md)

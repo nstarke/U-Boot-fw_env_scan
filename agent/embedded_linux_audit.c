@@ -37,7 +37,7 @@ static void usage(const char *prog)
 		"  linux list-symlinks List symlinks under a directory (use --recursive to recurse)\n"
 		"  linux remote-copy  Copy a local file to remote destination\n"
 		"  linux ssh          SSH client/copy/tunnel operations\n"
-		"  linux tpm2         Run built-in TPM2 commands through the TPM2-TSS library\n"
+		"  tpm2               Run built-in TPM2 commands through the TPM2-TSS library\n"
 		"  efi orom           EFI option ROM utilities (pull/list)\n"
 		"  efi dump-vars      Dump EFI variables with txt/csv/json formatting\n"
 		"  bios orom          BIOS option ROM utilities (pull/list)\n"
@@ -62,7 +62,7 @@ static void usage(const char *prog)
 		"  %s --output-format json --output-http http://127.0.0.1:5000 linux list-symlinks /etc --recursive\n"
 		"  %s --output-http https://127.0.0.1:5443 linux remote-copy /tmp/fw.bin\n"
 		"  %s linux ssh client 192.168.1.10 --port 22\n"
-		"  %s linux tpm2 getcap properties-fixed\n"
+		"  %s tpm2 getcap properties-fixed\n"
 		"  %s --quiet --output-http http://127.0.0.1:5000/orom efi orom pull\n"
 		"  %s --output-format json --output-http http://127.0.0.1:5000 efi dump-vars\n"
 		"  %s --quiet --output-tcp 127.0.0.1:5001 bios orom list\n"
@@ -526,8 +526,6 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 			ret = linux_list_files_scan_main(argc - sub_idx, argv + sub_idx);
 		} else if (!strcmp(argv[sub_idx], "list-symlinks"))
 			ret = linux_list_symlinks_scan_main(argc - sub_idx, argv + sub_idx);
-		else if (!strcmp(argv[sub_idx], "tpm2"))
-			ret = linux_tpm2_scan_main(argc - sub_idx, argv + sub_idx);
 		else {
 			fprintf(stderr, "Unknown linux subcommand: %s\n\n", argv[sub_idx]);
 			usage(argv[0]);
@@ -578,6 +576,11 @@ int embedded_linux_audit_dispatch(int argc, char **argv)
 			ret = 2;
 		}
 
+		goto done;
+	}
+
+	if (!strcmp(argv[cmd_idx], "tpm2")) {
+		ret = tpm2_scan_main(argc - cmd_idx, argv + cmd_idx);
 		goto done;
 	}
 
