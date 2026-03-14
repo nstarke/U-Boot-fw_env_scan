@@ -6,15 +6,56 @@ name: Agent Tests
       - Release Cross Static Builds
     types:
       - completed
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  build-release-binaries:
+    name: build/release-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip local release build when using triggering workflow artifacts
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          set -euo pipefail
+          echo "Using release binaries from triggering workflow artifacts."
+
+      - name: Checkout
+        if: ${{ github.event_name != 'workflow_run' }}
+        uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
+          submodules: recursive
+
+      - name: Install local release build dependencies
+        if: ${{ github.event_name != 'workflow_run' }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake cmake libtool-bin libltdl-dev llvm
+
+      - name: Build release binaries for agent tests
+        if: ${{ github.event_name != 'workflow_run' }}
+        run: |
+          set -euo pipefail
+          /bin/sh tests/compile_release_binaries_locally.sh --jobs="$(nproc)" \
+            arm32-le arm32-be aarch64-le aarch64-be mips-le mips-be mips64-le mips64-be \
+            powerpc-le powerpc-be x86 x86_64 riscv32 riscv64
+
+      - name: Upload locally built release binaries
+        if: ${{ github.event_name != 'workflow_run' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ela-release-binaries
+          path: api/data/release_binaries
+
   shell-tests:
     name: tests/agent/shell
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: build-release-binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,8 +74,14 @@ jobs:
           pattern: ela-x86_64
           path: downloaded-release-binaries
 
-      - name: Stage native agent binary from triggering workflow artifacts
-        if: ${{ github.event_name == 'workflow_run' }}
+      - name: Download locally built release binaries
+        if: ${{ github.event_name != 'workflow_run' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ela-release-binaries
+          path: downloaded-release-binaries
+
+      - name: Stage native agent binary
         run: |
           set -euo pipefail
           binary_path="$(find downloaded-release-binaries -type f \( -name 'ela-x86_64' -o -name 'embedded_linux_audit-x86_64' \) | head -n 1)"
@@ -44,13 +91,6 @@ jobs:
           fi
 
           install -m 755 "$binary_path" /tmp/embedded_linux_audit
-
-      - name: Require release artifact for shell tests
-        if: ${{ github.event_name != 'workflow_run' }}
-        run: |
-          set -euo pipefail
-          echo "error: shell tests require a triggering Release Cross Static Builds workflow run so the prebuilt x86_64 artifact can be downloaded" >&2
-          exit 1
 
       - name: Run shell tests
         env:
@@ -61,7 +101,8 @@ jobs:
 
   script-tests:
     name: tests/agent/scripts
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: build-release-binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -80,8 +121,14 @@ jobs:
           pattern: ela-x86_64
           path: downloaded-release-binaries
 
-      - name: Stage native agent binary from triggering workflow artifacts
-        if: ${{ github.event_name == 'workflow_run' }}
+      - name: Download locally built release binaries
+        if: ${{ github.event_name != 'workflow_run' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ela-release-binaries
+          path: downloaded-release-binaries
+
+      - name: Stage native agent binary
         run: |
           set -euo pipefail
           binary_path="$(find downloaded-release-binaries -type f \( -name 'ela-x86_64' -o -name 'embedded_linux_audit-x86_64' \) | head -n 1)"
@@ -91,13 +138,6 @@ jobs:
           fi
 
           install -m 755 "$binary_path" /tmp/embedded_linux_audit
-
-      - name: Require release artifact for script tests
-        if: ${{ github.event_name != 'workflow_run' }}
-        run: |
-          set -euo pipefail
-          echo "error: script tests require a triggering Release Cross Static Builds workflow run so the prebuilt x86_64 artifact can be downloaded" >&2
-          exit 1
 
       - name: Run script coverage files
         env:
@@ -129,7 +169,8 @@ jobs:
 
   qemu-tests:
     name: tests/agent/qemu
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    needs: build-release-binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -148,12 +189,6 @@ jobs:
             qemu-user-static \
             xz-utils
 
-      - name: Install local release build dependencies
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          set -euo pipefail
-          sudo apt-get install -y autoconf automake cmake libtool-bin llvm
-
       - name: Download cross-build artifacts from triggering workflow
         if: ${{ github.event_name == 'workflow_run' }}
         uses: actions/download-artifact@v4
@@ -163,30 +198,40 @@ jobs:
           pattern: ela-*
           path: downloaded-release-binaries
 
+      - name: Download locally built release binaries
+        if: ${{ github.event_name != 'workflow_run' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ela-release-binaries
+          path: downloaded-release-binaries
+
       - name: Stage downloaded release binaries for qemu tests
-        if: ${{ github.event_name == 'workflow_run' }}
         run: |
           set -euo pipefail
           rm -rf api/data/release_binaries
           mkdir -p api/data/release_binaries
 
-          find downloaded-release-binaries -mindepth 1 -maxdepth 1 -type d | while IFS= read -r artifact_dir; do
-            isa="${artifact_dir##*/}"
-            isa="${isa#ela-}"
-            dest_dir="api/data/release_binaries/${isa}"
-            mkdir -p "$dest_dir"
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            find downloaded-release-binaries -mindepth 1 -maxdepth 1 -type d | while IFS= read -r artifact_dir; do
+              isa="${artifact_dir##*/}"
+              isa="${isa#ela-}"
+              dest_dir="api/data/release_binaries/${isa}"
+              mkdir -p "$dest_dir"
 
-            find "$artifact_dir" -type f \( -name 'ela-*' -o -name 'embedded_linux_audit-*' \) | while IFS= read -r binary; do
-              binary_name="$(basename "$binary")"
-              case "$binary_name" in
-                embedded_linux_audit-*)
-                  binary_name="ela-${binary_name#embedded_linux_audit-}"
-                  ;;
-              esac
+              find "$artifact_dir" -type f \( -name 'ela-*' -o -name 'embedded_linux_audit-*' \) | while IFS= read -r binary; do
+                binary_name="$(basename "$binary")"
+                case "$binary_name" in
+                  embedded_linux_audit-*)
+                    binary_name="ela-${binary_name#embedded_linux_audit-}"
+                    ;;
+                esac
 
-              install -m 755 "$binary" "$dest_dir/$binary_name"
+                install -m 755 "$binary" "$dest_dir/$binary_name"
+              done
             done
-          done
+          else
+            cp -a downloaded-release-binaries/release_binaries/. api/data/release_binaries/
+          fi
 
       - name: Run qemu ISA tests
         env:
@@ -195,3 +240,40 @@ jobs:
         run: |
           set -euo pipefail
           bash tests/agent/qemu/test_all.sh
+
+  prepare-release-publish-artifacts:
+    name: prepare/release-publish-artifacts
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'release' }}
+    needs:
+      - shell-tests
+      - script-tests
+      - qemu-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download cross-build artifacts from triggering workflow
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          pattern: ela-*
+          path: release-assets
+
+      - name: Download release metadata from triggering workflow
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: release-metadata
+          path: release-metadata
+
+      - name: Upload publishable release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-release-assets
+          path: release-assets
+
+      - name: Upload publishable release metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: publish-release-metadata
+          path: release-metadata/tag.txt
