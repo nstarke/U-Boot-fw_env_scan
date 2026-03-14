@@ -185,10 +185,29 @@ jobs:
           exit "$rc"
 
   qemu-tests:
-    name: tests/agent/qemu
+    name: tests/agent/qemu-${{ matrix.isa }}
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     needs: build-release-binaries
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        isa:
+          - arm32-le
+          - arm32-be
+          - aarch64-le
+          - aarch64-be
+          - mips-le
+          - mips-be
+          - mips64-le
+          - mips64-be
+          - powerpc-le
+          - powerpc-be
+          - x86
+          - x86_64
+          - riscv32
+          - riscv64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -212,70 +231,128 @@ jobs:
         with:
           github-token: ${{ github.token }}
           run-id: ${{ github.event.workflow_run.id }}
-          pattern: ela-*
+          name: ela-${{ matrix.isa }}
           path: downloaded-release-binaries
 
       - name: Download locally built release binaries
         if: ${{ github.event_name != 'workflow_run' }}
         uses: actions/download-artifact@v4
         with:
-          pattern: ela-*
+          name: ela-${{ matrix.isa }}
           path: downloaded-release-binaries
 
-      - name: Stage downloaded release binaries for qemu tests
+      - name: Stage downloaded release binary for qemu tests
         run: |
           set -euo pipefail
           rm -rf api/data/release_binaries
-          mkdir -p api/data/release_binaries
+          dest_dir="api/data/release_binaries/${{ matrix.isa }}"
+          mkdir -p "$dest_dir"
 
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            find downloaded-release-binaries -mindepth 1 -maxdepth 1 -type d | while IFS= read -r artifact_dir; do
-              isa="${artifact_dir##*/}"
-              isa="${isa#ela-}"
-              dest_dir="api/data/release_binaries/${isa}"
-              mkdir -p "$dest_dir"
+          find downloaded-release-binaries -type f \( -name 'ela-*' -o -name 'embedded_linux_audit-*' \) | while IFS= read -r binary; do
+            binary_name="$(basename "$binary")"
+            case "$binary_name" in
+              embedded_linux_audit-*)
+                binary_name="ela-${binary_name#embedded_linux_audit-}"
+                ;;
+            esac
 
-              find "$artifact_dir" -type f \( -name 'ela-*' -o -name 'embedded_linux_audit-*' \) | while IFS= read -r binary; do
-                binary_name="$(basename "$binary")"
-                case "$binary_name" in
-                  embedded_linux_audit-*)
-                    binary_name="ela-${binary_name#embedded_linux_audit-}"
-                    ;;
-                esac
+            install -m 755 "$binary" "$dest_dir/$binary_name"
+          done
 
-                install -m 755 "$binary" "$dest_dir/$binary_name"
-              done
-            done
-          else
-            if [ -d downloaded-release-binaries/release_binaries ]; then
-              cp -a downloaded-release-binaries/release_binaries/. api/data/release_binaries/
-            else
-              find downloaded-release-binaries -mindepth 1 -maxdepth 1 -type d | while IFS= read -r artifact_dir; do
-                isa="${artifact_dir##*/}"
-                dest_dir="api/data/release_binaries/${isa}"
-                mkdir -p "$dest_dir"
-
-                find "$artifact_dir" -type f \( -name 'ela-*' -o -name 'embedded_linux_audit-*' \) | while IFS= read -r binary; do
-                  binary_name="$(basename "$binary")"
-                  case "$binary_name" in
-                    embedded_linux_audit-*)
-                      binary_name="ela-${binary_name#embedded_linux_audit-}"
-                      ;;
-                  esac
-
-                  install -m 755 "$binary" "$dest_dir/$binary_name"
-                done
-              done
-            fi
-          fi
-
-      - name: Run qemu ISA tests
+      - name: Run qemu ISA test
         env:
           ELA_QEMU_RUN_AS_ROOT: 1
           ELA_QEMU_REQUIRE_RELEASE_BINARIES: ${{ github.event_name == 'workflow_run' && '1' || '0' }}
         run: |
           set -euo pipefail
-          bash tests/agent/qemu/test_all.sh
+          mkdir -p qemu-logs
+          log_path="qemu-logs/${{ matrix.isa }}.log"
+          /bin/sh "tests/agent/qemu/${{ matrix.isa }}.sh" 2>&1 | tee "$log_path"
+          test_rc=${PIPESTATUS[0]}
+          exit "$test_rc"
+
+      - name: Upload qemu ISA log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-log-${{ matrix.isa }}
+          path: qemu-logs/${{ matrix.isa }}.log
+
+  qemu-summary:
+    name: tests/agent/qemu-summary
+    if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    needs: qemu-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download qemu ISA logs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: qemu-log-*
+          path: qemu-logs
+
+      - name: Write QEMU summary
+        run: |
+          set -euo pipefail
+          {
+            echo "## QEMU Test Summary"
+            echo
+            echo "Overall matrix result: \`${{ needs.qemu-tests.result }}\`"
+            echo
+            echo "Per-ISA jobs:"
+            echo "- tests/agent/qemu-arm32-le"
+            echo "- tests/agent/qemu-arm32-be"
+            echo "- tests/agent/qemu-aarch64-le"
+            echo "- tests/agent/qemu-aarch64-be"
+            echo "- tests/agent/qemu-mips-le"
+            echo "- tests/agent/qemu-mips-be"
+            echo "- tests/agent/qemu-mips64-le"
+            echo "- tests/agent/qemu-mips64-be"
+            echo "- tests/agent/qemu-powerpc-le"
+            echo "- tests/agent/qemu-powerpc-be"
+            echo "- tests/agent/qemu-x86"
+            echo "- tests/agent/qemu-x86_64"
+            echo "- tests/agent/qemu-riscv32"
+            echo "- tests/agent/qemu-riscv64"
+            echo
+            echo "Grouped log excerpts:"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for isa in \
+            arm32-le arm32-be aarch64-le aarch64-be \
+            mips-le mips-be mips64-le mips64-be \
+            powerpc-le powerpc-be x86 x86_64 riscv32 riscv64
+          do
+            log_path="$(find qemu-logs -type f -name "${isa}.log" | head -n 1)"
+            {
+              echo
+              echo "### ${isa}"
+              if [ -n "$log_path" ] && [ -f "$log_path" ]; then
+                pass_count="$(grep -c '^\[PASS\]' "$log_path" 2>/dev/null || true)"
+                fail_count="$(grep -c '^\[FAIL\]' "$log_path" 2>/dev/null || true)"
+                echo
+                echo "- Pass lines: ${pass_count}"
+                echo "- Fail lines: ${fail_count}"
+                echo
+                echo '```text'
+                sed -n '1,120p' "$log_path"
+                echo '```'
+              else
+                echo
+                echo "_Log artifact missing for ${isa}._"
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          {
+            echo
+            echo "Full per-ISA logs are attached as workflow artifacts named \`qemu-log-<isa>\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail summary job when any QEMU matrix job failed
+        if: ${{ needs.qemu-tests.result != 'success' }}
+        run: |
+          echo "One or more QEMU ISA jobs failed." >&2
+          exit 1
 
   prepare-release-publish-artifacts:
     name: prepare/release-publish-artifacts
@@ -284,6 +361,7 @@ jobs:
       - shell-tests
       - script-tests
       - qemu-tests
+      - qemu-summary
     runs-on: ubuntu-latest
     steps:
       - name: Download cross-build artifacts from triggering workflow
