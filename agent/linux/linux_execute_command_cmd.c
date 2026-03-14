@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <json.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
